@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>英语记忆助手</title>
+  <style>
+    :root {
+      --primary: #4a6fa5;
+      --primary-dark: #3a5a8a;
+      --success: #4caf50;
+      --warning: #ff9800;
+      --danger: #f44336;
+      --bg: #f5f6fa;
+      --card: #ffffff;
+      --text: #2d3436;
+      --text-light: #636e72;
+      --border: #dfe6e9;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    .app { max-width: 720px; margin: 0 auto; padding: 16px; }
+    .nav {
+      display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .nav-btn {
+      flex: 1; min-width: 80px; padding: 10px 12px; border: none;
+      background: var(--card); color: var(--text); border-radius: 10px;
+      font-size: 14px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      transition: all 0.2s; font-weight: 500;
+    }
+    .nav-btn:hover { background: #e8ecf1; }
+    .nav-btn.active { background: var(--primary); color: #fff; }
+
+    .card {
+      background: var(--card); border-radius: 14px; padding: 20px;
+      margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .card-title { font-size: 18px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 22px; height: 22px; border-radius: 11px; font-size: 12px;
+      background: var(--danger); color: #fff; padding: 0 7px; font-weight: 600;
+    }
+
+    /* Dashboard */
+    .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .dash-card {
+      background: var(--card); border-radius: 14px; padding: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06); cursor: pointer;
+      transition: transform 0.15s; border: 2px solid transparent;
+    }
+    .dash-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+    .dash-card .label { font-size: 13px; color: var(--text-light); margin-bottom: 6px; }
+    .dash-card .count { font-size: 32px; font-weight: 700; color: var(--primary); }
+    .dash-card .sub { font-size: 12px; color: var(--text-light); margin-top: 4px; }
+
+    /* Study Page */
+    .study-area { text-align: center; padding: 20px 10px; }
+    .study-prompt {
+      font-size: 22px; font-weight: 600; margin-bottom: 24px;
+      line-height: 1.5; word-break: break-word;
+    }
+    .study-answer {
+      font-size: 20px; color: var(--text-light); margin-bottom: 24px;
+      min-height: 60px; display: flex; align-items: center; justify-content: center;
+      background: #f8f9fa; border-radius: 10px; padding: 16px;
+      word-break: break-word; overflow-wrap: break-word; flex-wrap: wrap;
+      text-align: center;
+    }
+    .study-answer.hidden {
+      background: transparent; color: transparent;
+      user-select: none; cursor: pointer;
+    }
+    .study-answer.hidden::after {
+      content: "点击显示答案"; color: var(--primary); font-size: 16px;
+      position: absolute;
+    }
+    .study-answer { position: relative; }
+    .btn {
+      padding: 12px 24px; border: none; border-radius: 10px;
+      font-size: 15px; cursor: pointer; font-weight: 500;
+      transition: all 0.15s; margin: 4px;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warning { background: var(--warning); color: #fff; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-outline { background: #fff; border: 1.5px solid var(--border); color: var(--text); }
+    .btn-block { display: block; width: 100%; margin: 8px 0; }
+    .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+    .audio-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #e3f2fd; color: #1976d2; padding: 8px 16px;
+      border-radius: 20px; font-size: 14px; cursor: pointer; border: none;
+      margin-bottom: 16px;
+    }
+    .audio-btn:active { transform: scale(0.96); }
+
+    .phonetic-bar {
+      font-size: 16px; color: #8e8e93; font-style: italic;
+      min-height: 24px; margin-bottom: 16px; text-align: center;
+    }
+
+    /* Upload */
+    .upload-box {
+      width: 100%; min-height: 200px; border: 2px dashed var(--border);
+      border-radius: 12px; padding: 16px; font-size: 14px; line-height: 1.6;
+      resize: vertical; font-family: inherit;
+    }
+    .upload-box:focus { outline: none; border-color: var(--primary); }
+    .upload-hint { font-size: 12px; color: var(--text-light); margin: 8px 0 12px; }
+    .list-item {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 12px; border-bottom: 1px solid var(--border); gap: 10px;
+    }
+    .list-item:last-child { border-bottom: none; }
+    .list-item .content { flex: 1; word-break: break-word; font-size: 14px; }
+    .list-item .actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .icon-btn {
+      width: 32px; height: 32px; border-radius: 8px; border: none;
+      background: var(--bg); cursor: pointer; display: flex; align-items: center;
+      justify-content: center; font-size: 14px;
+    }
+    .icon-btn:hover { background: #e0e4e8; }
+
+    /* Settings */
+    .setting-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 0; border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-size: 15px; }
+    .setting-desc { font-size: 12px; color: var(--text-light); margin-top: 2px; }
+    input[type="number"] {
+      width: 80px; padding: 8px 10px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 15px; text-align: center;
+    }
+    select {
+      padding: 8px 12px; border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 14px; background: #fff;
+    }
+
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-light); }
+    .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+
+    .progress-bar {
+      height: 6px; background: #e0e4e8; border-radius: 3px;
+      overflow: hidden; margin-top: 8px;
+    }
+    .progress-bar .fill { height: 100%; background: var(--success); border-radius: 3px; transition: width 0.3s; }
+
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #2d3436; color: #fff; padding: 10px 20px; border-radius: 10px;
+      font-size: 14px; z-index: 1000; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+    }
+    .toast.show { opacity: 1; }
+
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: flex; align-items: center; justify-content: center; z-index: 500;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: var(--card); border-radius: 16px; padding: 24px;
+      width: 90%; max-width: 420px; max-height: 80vh; overflow-y: auto;
+    }
+    .modal h3 { margin-bottom: 16px; }
+    .modal textarea { width: 100%; min-height: 120px; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; font-size: 14px; resize: vertical; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+    @media (max-width: 480px) {
+      .dash-grid { grid-template-columns: 1fr; }
+      .study-prompt { font-size: 18px; }
+      .study-answer { font-size: 16px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <div class="nav" id="nav">
+    <button class="nav-btn active" data-page="dashboard">仪表盘</button>
+    <button class="nav-btn" data-page="sentences">句子</button>
+    <button class="nav-btn" data-page="grammar">语法</button>
+    <button class="nav-btn" data-page="settings">设置</button>
+  </div>
+
+  <div id="page-dashboard">
+    <div class="dash-grid">
+      <div class="dash-card" onclick="app.goStudy('sentence')">
+        <div class="label">句子 · 待复习</div>
+        <div class="count" id="dash-sentence-review">0</div>
+        <div class="sub" id="dash-sentence-new">新学 0 / 上限 <span class="limit">20</span></div>
+      </div>
+      <div class="dash-card" onclick="app.goStudy('grammar')">
+        <div class="label">语法 · 待复习</div>
+        <div class="count" id="dash-grammar-review">0</div>
+        <div class="sub" id="dash-grammar-new">新学 0 / 上限 <span class="limit">20</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">今日概览</div>
+      <div style="display:flex;justify-content:space-around;text-align:center;">
+        <div><div style="font-size:28px;font-weight:700;color:var(--success);" id="today-done">0</div><div style="font-size:12px;color:var(--text-light);">已完成</div></div>
+        <div><div style="font-size:28px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">快速操作</div>
+      <button class="btn btn-outline btn-block" onclick="app.goPage('sentences')">管理句子素材</button>
+      <button class="btn btn-outline btn-block" onclick="app.goPage('grammar')">管理语法素材</button>
+    </div>
+  </div>
+
+  <div id="page-sentences" style="display:none;">
+    <div class="card">
+      <div class="card-title">批量添加句子</div>
+      <div class="upload-hint">每行一条，格式：英文句子 | 中文释义 | 音标（音标可选，用 | 分隔）</div>
+      <textarea class="upload-box" id="sentence-input" placeholder="The quick brown fox jumps over the lazy dog. | 那只敏捷的棕色狐狸跳过了那只懒狗。 | ðə kwɪk braʊn fɒks dʒʌmps ˈəʊvə ðə ˈleɪzi dɒɡ
+Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
+..."></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.importSentences()">导入</button>
+        <button class="btn btn-outline" onclick="app.pasteFromClipboard('sentence-input')">📋 从剪贴板粘贴</button>
+        <button class="btn btn-outline" onclick="document.getElementById('sentence-input').value=''">清空</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">句子列表 <span class="badge" id="sentence-count">0</span></div>
+      <div id="sentence-list"></div>
+    </div>
+  </div>
+
+  <div id="page-grammar" style="display:none;">
+    <div class="card">
+      <div class="card-title">批量添加语法</div>
+      <div class="upload-hint">每条语法用 === 分隔。空行不作为分隔符。</div>
+      <textarea class="upload-box" id="grammar-input" placeholder="一般现在时表示经常性、习惯性的动作或状态。&#10;结构：主语 + 动词原形/第三人称单数 + 其他。&#10;===&#10;现在进行时表示此时此刻正在进行的动作。&#10;结构：主语 + am/is/are + doing + 其他。&#10;..."></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.importGrammar()">导入</button>
+        <button class="btn btn-outline" onclick="app.pasteFromClipboard('grammar-input')">📋 从剪贴板粘贴</button>
+        <button class="btn btn-outline" onclick="document.getElementById('grammar-input').value=''">清空</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">语法列表 <span class="badge" id="grammar-count">0</span></div>
+      <div id="grammar-list"></div>
+    </div>
+  </div>
+
+  <div id="page-settings" style="display:none;">
+    <div class="card">
+      <div class="card-title">每日上限</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">每日新学句子</div>
+          <div class="setting-desc">每天最多学习几条新句子</div>
+        </div>
+        <input type="number" id="setting-sentence-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">每日新学语法</div>
+          <div class="setting-desc">每天最多学习几条新语法</div>
+        </div>
+        <input type="number" id="setting-grammar-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">句子学习模式</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">启用英译中</div>
+          <div class="setting-desc">显示英文，回忆中文释义</div>
+        </div>
+        <select id="setting-mode-en2zh" onchange="app.saveSettings()">
+          <option value="1">启用</option>
+          <option value="0">禁用</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">启用中译英</div>
+          <div class="setting-desc">显示中文，回忆英文句子</div>
+        </div>
+        <select id="setting-mode-zh2en" onchange="app.saveSettings()">
+          <option value="1">启用</option>
+          <option value="0">禁用</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">发音设置</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">发音口音</div>
+        </div>
+        <select id="setting-voice-lang" onchange="app.saveSettings()">
+          <option value="en-US">美式英语</option>
+          <option value="en-GB">英式英语</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">语速</div>
+        </div>
+        <select id="setting-voice-rate" onchange="app.saveSettings()">
+          <option value="0.7">慢速</option>
+          <option value="1" selected>正常</option>
+          <option value="1.3">快速</option>
+        </select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">GitHub Gist 云同步</div>
+      <div class="upload-hint" style="margin-bottom:12px;">配置后可自动同步到 GitHub Gist，实现多设备互通。Token 仅保存在浏览器本地。</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Gist ID</div>
+          <div class="setting-desc">已有 Gist 的 ID，留空则首次同步时自动创建</div>
+        </div>
+        <input type="text" id="setting-gist-id" placeholder="abcdef123456..." style="width:180px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">GitHub Token</div>
+          <div class="setting-desc">需要 gist 写入权限的 Personal Access Token</div>
+        </div>
+        <input type="password" id="setting-gist-token" placeholder="ghp_xxxxxxxx" style="width:180px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;" onchange="app.saveSettings()">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px;">
+        <button class="btn btn-primary" onclick="app.syncToGist()">手动上传到 Gist</button>
+        <button class="btn btn-outline" onclick="app.syncFromGist()">从 Gist 下载</button>
+      </div>
+      <div id="gist-status" style="font-size:13px;color:var(--text-light);margin-top:8px;text-align:center;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">数据管理</div>
+      <button class="btn btn-outline btn-block" onclick="app.exportData()">导出所有数据（备份）</button>
+      <button class="btn btn-outline btn-block" onclick="document.getElementById('import-file').click()">导入数据（恢复）</button>
+      <input type="file" id="import-file" style="display:none" accept=".json" onchange="app.importData(this)">
+      <button class="btn btn-danger btn-block" onclick="app.resetData()" style="margin-top:12px;">重置所有数据</button>
+    </div>
+  </div>
+
+  <div id="page-study" style="display:none;">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
+        <span id="study-progress" style="font-size:13px;color:var(--text-light);">1 / 10</span>
+      </div>
+      <div class="study-area">
+        <div id="study-audio-wrap"></div>
+        <div class="study-prompt" id="study-prompt"></div>
+        <div class="phonetic-bar" id="study-phonetic">点击句子中的单词查看音标</div>
+        <div class="study-answer hidden" id="study-answer" onclick="app.showAnswer()"></div>
+        <div id="study-actions-reveal">
+          <button class="btn btn-primary btn-block" onclick="app.showAnswer()" style="margin-top:20px;">显示答案</button>
+        </div>
+        <div id="study-actions-grade" style="display:none;">
+          <div class="upload-hint" style="margin-bottom:8px;">请根据回忆准确度选择</div>
+          <div class="btn-row">
+            <button class="btn btn-danger" onclick="app.grade(1)">忘记</button>
+            <button class="btn btn-warning" onclick="app.grade(2)">模糊</button>
+            <button class="btn btn-success" onclick="app.grade(3)">认识</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-outline" id="btn-prev" onclick="app.goPrev()">◀ 上一句</button>
+      <button class="btn btn-outline" onclick="app.endStudy()">结束学习</button>
+      <button class="btn btn-outline" id="btn-next" onclick="app.goNext()">下一句 ▶</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h3 id="modal-title">编辑</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="app.closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="app.confirmModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const STORAGE_KEYS = {
+    sentences: 'em_sentences',
+    grammar: 'em_grammar',
+    settings: 'em_settings',
+    records: 'em_records',
+    daily: 'em_daily'
+  };
+
+const DEFAULT_SETTINGS = {
+  sentenceLimit: 20,
+  grammarLimit: 20,
+  en2zh: 1,
+  zh2en: 1,
+  voiceLang: 'en-US',
+  voiceRate: '1',
+  gistId: '',
+  gistToken: ''
+};
+
+  function nowDate() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  function parseDate(str) {
+    return new Date(str + 'T00:00:00');
+  }
+
+  function daysDiff(a, b) {
+    const ms = parseDate(b) - parseDate(a);
+    return Math.round(ms / 86400000);
+  }
+
+  function uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  function load(key, def) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : def;
+    } catch(e) { return def; }
+  }
+
+  function save(key, val) {
+    localStorage.setItem(key, JSON.stringify(val));
+  }
+
+  class App {
+    constructor() {
+      // Clean up legacy phonetic cache from old auto-lookup feature
+      localStorage.removeItem('em_phonetic_cache');
+      this.sentences = load(STORAGE_KEYS.sentences, []);
+      this.grammar = load(STORAGE_KEYS.grammar, []);
+      this.settings = Object.assign({}, DEFAULT_SETTINGS, load(STORAGE_KEYS.settings, {}));
+      this.records = load(STORAGE_KEYS.records, {});
+      this.daily = load(STORAGE_KEYS.daily, {});
+      this.currentPage = 'dashboard';
+      this.studyQueue = [];
+      this.studyIndex = 0;
+      this.studyType = '';
+      this.today = nowDate();
+      this.ensureDaily();
+      this.initNav();
+      this.applySettingsUI();
+      this.refreshDashboard();
+
+      // Auto sync from Gist on load if configured
+      if (this.settings.gistId && this.settings.gistToken) {
+        this.syncFromGist(true);
+      }
+    }
+
+    ensureDaily() {
+      if (!this.daily.date || this.daily.date !== this.today) {
+        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0 };
+        save(STORAGE_KEYS.daily, this.daily);
+      }
+    }
+
+    initNav() {
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => this.goPage(btn.dataset.page));
+      });
+    }
+
+    goPage(page) {
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
+      ['dashboard','sentences','grammar','settings','study'].forEach(p => {
+        const el = document.getElementById('page-' + p);
+        if (el) el.style.display = (p === page) ? 'block' : 'none';
+      });
+      this.currentPage = page;
+      if (page === 'dashboard') this.refreshDashboard();
+      if (page === 'sentences') this.renderSentenceList();
+      if (page === 'grammar') this.renderGrammarList();
+    }
+
+    applySettingsUI() {
+      document.getElementById('setting-sentence-limit').value = this.settings.sentenceLimit;
+      document.getElementById('setting-grammar-limit').value = this.settings.grammarLimit;
+      document.getElementById('setting-mode-en2zh').value = this.settings.en2zh;
+      document.getElementById('setting-mode-zh2en').value = this.settings.zh2en;
+      document.getElementById('setting-voice-lang').value = this.settings.voiceLang;
+      document.getElementById('setting-voice-rate').value = this.settings.voiceRate;
+      document.getElementById('setting-gist-id').value = this.settings.gistId || '';
+      document.getElementById('setting-gist-token').value = this.settings.gistToken || '';
+    }
+
+    saveSettings() {
+      this.settings.sentenceLimit = parseInt(document.getElementById('setting-sentence-limit').value) || 20;
+      this.settings.grammarLimit = parseInt(document.getElementById('setting-grammar-limit').value) || 20;
+      this.settings.en2zh = parseInt(document.getElementById('setting-mode-en2zh').value);
+      this.settings.zh2en = parseInt(document.getElementById('setting-mode-zh2en').value);
+      this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
+      this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
+      this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
+      this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
+      save(STORAGE_KEYS.settings, this.settings);
+      this.toast('设置已保存');
+      this.refreshDashboard();
+    }
+
+    getDueItems(items, type) {
+      const today = this.today;
+      const newLimit = type === 'sentence' ? this.settings.sentenceLimit : this.settings.grammarLimit;
+      const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
+      const remainingNew = Math.max(0, newLimit - alreadyNew);
+
+      const due = [];
+      items.forEach(it => {
+        if (!it.nextReview || it.nextReview <= today) {
+          due.push(it);
+        }
+      });
+
+      // Sort due by nextReview ascending, then by repetitions ascending (harder first)
+      due.sort((a, b) => {
+        const da = a.nextReview || '9999-99-99';
+        const db = b.nextReview || '9999-99-99';
+        if (da !== db) return da < db ? -1 : 1;
+        return (a.repetitions || 0) - (b.repetitions || 0);
+      });
+
+      // Split due into review items and new items
+      const reviewItems = due.filter(it => (it.repetitions || 0) > 0);
+      const dueNewItems = due.filter(it => (it.repetitions || 0) === 0);
+      const notStudiedNew = dueNewItems.filter(it => !this.records[it.id]);
+      const toAdd = notStudiedNew.slice(0, remainingNew);
+
+      // Merge new items and review items with interleaving
+      const out = [];
+      let ni = 0, ri = 0;
+      const total = toAdd.length + reviewItems.length;
+      const newInterval = toAdd.length > 0 ? Math.max(1, Math.floor(total / (toAdd.length + 1))) : 0;
+      while (ri < reviewItems.length || ni < toAdd.length) {
+        if (ni < toAdd.length && (out.length % (newInterval + 1) === newInterval || ri >= reviewItems.length)) {
+          out.push(toAdd[ni++]);
+        } else if (ri < reviewItems.length) {
+          out.push(reviewItems[ri++]);
+        }
+      }
+      return out;
+    }
+
+    refreshDashboard() {
+      const sDue = this.getDueItems(this.sentences, 'sentence');
+      const gDue = this.getDueItems(this.grammar, 'grammar');
+      document.getElementById('dash-sentence-review').textContent = sDue.length;
+      document.getElementById('dash-grammar-review').textContent = gDue.length;
+      const sl = this.settings.sentenceLimit, gl = this.settings.grammarLimit;
+      document.querySelector('#dash-sentence-new .limit').textContent = sl;
+      document.querySelector('#dash-grammar-new .limit').textContent = gl;
+
+      const sNew = this.daily.sentenceNew, gNew = this.daily.grammarNew;
+      document.getElementById('dash-sentence-new').childNodes[0].textContent = '新学 ' + sNew + ' / 上限 ';
+      document.getElementById('dash-grammar-new').childNodes[0].textContent = '新学 ' + gNew + ' / 上限 ';
+
+      const done = this.daily.sentenceDone + this.daily.grammarDone;
+      const total = sDue.length + gDue.length;
+      document.getElementById('today-done').textContent = done;
+      document.getElementById('today-total').textContent = total;
+    }
+
+    // Import
+    importSentences() {
+      const raw = document.getElementById('sentence-input').value.trim();
+      if (!raw) return this.toast('请输入内容');
+      const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      let added = 0;
+      let i = 0;
+      while (i < lines.length) {
+        const line = lines[i];
+        const parts = line.split('|').map(p => p.trim());
+        let en = '', zh = '', ph = '';
+        if (parts.length >= 3) {
+          en = parts[0]; zh = parts[1]; ph = parts[2];
+          i++;
+        } else if (parts.length === 2) {
+          en = parts[0]; zh = parts[1];
+          i++;
+        } else if (i + 1 < lines.length) {
+          en = line;
+          zh = lines[i + 1];
+          i += 2;
+        } else {
+          en = line; zh = '';
+          i++;
+        }
+        if (en) {
+          this.sentences.push({
+            id: uuid(), english: en, chinese: zh, phonetic: ph,
+            createdAt: this.today,
+            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+          });
+          added++;
+        }
+      }
+      save(STORAGE_KEYS.sentences, this.sentences);
+      document.getElementById('sentence-input').value = '';
+      this.toast('成功导入 ' + added + ' 条句子，当前共 ' + this.sentences.length + ' 条');
+      this.renderSentenceList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    importGrammar() {
+      const raw = document.getElementById('grammar-input').value.trim();
+      if (!raw) return this.toast('请输入内容');
+      const blocks = raw.split(/===+/).map(b => b.trim()).filter(Boolean);
+      let added = 0;
+      blocks.forEach(block => {
+        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+        const text = lines.join('\n');
+        if (text) {
+          this.grammar.push({
+            id: uuid(), rule: text,
+            createdAt: this.today,
+            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+          });
+          added++;
+        }
+      });
+      save(STORAGE_KEYS.grammar, this.grammar);
+      document.getElementById('grammar-input').value = '';
+      this.toast('成功导入 ' + added + ' 条语法，当前共 ' + this.grammar.length + ' 条');
+      this.renderGrammarList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    renderSentenceList() {
+      document.getElementById('sentence-count').textContent = this.sentences.length;
+      const el = document.getElementById('sentence-list');
+      if (!this.sentences.length) {
+        el.innerHTML = '<div class="empty-state"><div class="emoji">📝</div>还没有句子，去上方添加吧</div>';
+        return;
+      }
+      el.innerHTML = this.sentences.map((s, idx) => `
+        <div class="list-item">
+          <div class="content">
+            <div style="font-weight:600;margin-bottom:4px;">${this.escape(s.english)}</div>
+            ${s.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-bottom:2px;">${this.escape(s.phonetic)}</div>` : ''}
+            <div style="color:var(--text-light);font-size:13px;">${this.escape(s.chinese)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">下次复习: ${s.nextReview || '今天'} · 熟练度: ${s.repetitions || 0}</div>
+          </div>
+          <div class="actions">
+            <button class="icon-btn" onclick="app.editSentence('${s.id}')">✏️</button>
+            <button class="icon-btn" onclick="app.deleteSentence('${s.id}')">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    renderGrammarList() {
+      document.getElementById('grammar-count').textContent = this.grammar.length;
+      const el = document.getElementById('grammar-list');
+      if (!this.grammar.length) {
+        el.innerHTML = '<div class="empty-state"><div class="emoji">📘</div>还没有语法，去上方添加吧</div>';
+        return;
+      }
+      el.innerHTML = this.grammar.map(g => `
+        <div class="list-item">
+          <div class="content" style="white-space:pre-wrap;">${this.escape(g.rule)}</div>
+          <div class="actions">
+            <button class="icon-btn" onclick="app.editGrammar('${g.id}')">✏️</button>
+            <button class="icon-btn" onclick="app.deleteGrammar('${g.id}')">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    escape(t) {
+      const div = document.createElement('div');
+      div.textContent = t;
+      return div.innerHTML;
+    }
+
+    deleteSentence(id) {
+      if (!confirm('确定删除这条句子吗？')) return;
+      this.sentences = this.sentences.filter(s => s.id !== id);
+      save(STORAGE_KEYS.sentences, this.sentences);
+      this.renderSentenceList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    deleteGrammar(id) {
+      if (!confirm('确定删除这条语法吗？')) return;
+      this.grammar = this.grammar.filter(g => g.id !== id);
+      save(STORAGE_KEYS.grammar, this.grammar);
+      this.renderGrammarList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    editSentence(id) {
+      const s = this.sentences.find(x => x.id === id);
+      if (!s) return;
+      this.openModal('编辑句子', `
+        <div style="margin-bottom:10px;">英文</div>
+        <textarea id="edit-en" style="width:100%;min-height:60px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(s.english)}</textarea>
+        <div style="margin:12px 0 10px;">中文</div>
+        <textarea id="edit-zh" style="width:100%;min-height:60px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(s.chinese)}</textarea>
+        <div style="margin:12px 0 10px;">音标（可选）</div>
+        <textarea id="edit-ph" style="width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(s.phonetic || '')}</textarea>
+      `, () => {
+        s.english = document.getElementById('edit-en').value.trim();
+        s.chinese = document.getElementById('edit-zh').value.trim();
+        s.phonetic = document.getElementById('edit-ph').value.trim();
+        save(STORAGE_KEYS.sentences, this.sentences);
+        this.renderSentenceList();
+        this.closeModal();
+        this.syncToGist();
+      });
+    }
+
+    editGrammar(id) {
+      const g = this.grammar.find(x => x.id === id);
+      if (!g) return;
+      this.openModal('编辑语法', `
+        <textarea id="edit-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(g.rule)}</textarea>
+      `, () => {
+        g.rule = document.getElementById('edit-rule').value.trim();
+        save(STORAGE_KEYS.grammar, this.grammar);
+        this.renderGrammarList();
+        this.closeModal();
+        this.syncToGist();
+      });
+    }
+
+    openModal(title, bodyHtml, onConfirm) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').innerHTML = bodyHtml;
+      document.getElementById('modal-overlay').classList.add('show');
+      this._modalConfirm = onConfirm;
+    }
+
+    closeModal() {
+      document.getElementById('modal-overlay').classList.remove('show');
+      this._modalConfirm = null;
+    }
+
+    confirmModal() {
+      if (this._modalConfirm) this._modalConfirm();
+    }
+
+    // Study
+    goStudy(type) {
+      this.studyType = type;
+      const items = type === 'sentence' ? this.sentences : this.grammar;
+      const queue = this.getDueItems(items, type);
+      if (!queue.length) {
+        this.toast('今天没有需要复习的内容');
+        return;
+      }
+      this.studyQueue = queue;
+      this.studyIndex = 0;
+      this.goPage('study');
+      this.renderStudyCard();
+    }
+
+    renderStudyCard() {
+      const total = this.studyQueue.length;
+      document.getElementById('study-progress').textContent = (this.studyIndex + 1) + ' / ' + total;
+      const item = this.studyQueue[this.studyIndex];
+      const isSentence = this.studyType === 'sentence';
+
+      // For sentences, randomly choose direction based on settings
+      let mode = 'en2zh';
+      if (isSentence) {
+        const modes = [];
+        if (this.settings.en2zh) modes.push('en2zh');
+        if (this.settings.zh2en) modes.push('zh2en');
+        if (modes.length === 0) { modes.push('en2zh'); }
+        mode = modes[Math.floor(Math.random() * modes.length)];
+      }
+      this.currentStudyMode = mode;
+
+      const label = isSentence
+        ? ('句子 · ' + (mode === 'en2zh' ? '英译中' : '中译英'))
+        : '语法 · 回忆';
+      document.getElementById('study-type-label').textContent = label;
+
+      let prompt = '', answer = '';
+      if (isSentence) {
+        if (mode === 'en2zh') {
+          prompt = item.english;
+          answer = item.chinese || '(暂无释义)';
+        } else {
+          prompt = item.chinese || '(暂无释义)';
+          answer = item.english;
+        }
+      } else {
+        prompt = '回忆这条语法规则';
+        answer = item.rule;
+      }
+
+      document.getElementById('study-prompt').textContent = prompt;
+      document.getElementById('study-answer').textContent = answer;
+      document.getElementById('study-answer').classList.add('hidden');
+      document.getElementById('study-actions-reveal').style.display = 'block';
+      document.getElementById('study-actions-grade').style.display = 'none';
+
+      // Audio button
+      const audioWrap = document.getElementById('study-audio-wrap');
+      const phoneticEl = document.getElementById('study-phonetic');
+      const englishText = isSentence ? item.english : '';
+      if (englishText) {
+        audioWrap.innerHTML = `<button class="audio-btn" onclick="app.speak('${this.escapeAttr(englishText)}')">🔊 发音</button>`;
+      } else {
+        audioWrap.innerHTML = '';
+      }
+
+      // Show user-provided phonetic if available
+      if (phoneticEl) {
+        phoneticEl.textContent = (isSentence && item.phonetic) ? item.phonetic : '';
+      }
+
+      this.updateNavButtons();
+    }
+
+    escapeAttr(s) {
+      return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+    }
+
+    speak(text) {
+      if (!window.speechSynthesis) return this.toast('当前浏览器不支持发音');
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = this.settings.voiceLang;
+      u.rate = parseFloat(this.settings.voiceRate);
+      window.speechSynthesis.speak(u);
+    }
+
+    showAnswer() {
+      document.getElementById('study-answer').classList.remove('hidden');
+      document.getElementById('study-actions-reveal').style.display = 'none';
+      document.getElementById('study-actions-grade').style.display = 'block';
+    }
+
+    grade(quality) {
+      const item = this.studyQueue[this.studyIndex];
+      const isSentence = this.studyType === 'sentence';
+
+      // Track if this was a new item before we mutate it
+      const wasNew = (item.repetitions || 0) === 0;
+
+      // SRS update
+      let { repetitions = 0, interval = 0, ease = 2.5 } = item;
+      if (quality === 1) {
+        repetitions = 0;
+        interval = 1;
+        ease = Math.max(1.3, ease - 0.2);
+      } else if (quality === 2) {
+        interval = Math.max(1, Math.round(interval * 0.5));
+        if (interval < 1) interval = 1;
+        ease = Math.max(1.3, ease - 0.05);
+      } else {
+        if (repetitions === 0) {
+          interval = 1;
+        } else if (repetitions === 1) {
+          interval = 3;
+        } else {
+          interval = Math.round(interval * ease);
+        }
+        repetitions++;
+        ease += 0.1;
+      }
+      item.repetitions = repetitions;
+      item.interval = interval;
+      item.ease = ease;
+      const next = new Date();
+      next.setDate(next.getDate() + interval);
+      item.nextReview = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
+
+      // Daily tracking
+      if (isSentence) {
+        this.daily.sentenceDone++;
+        if (quality === 3) this.daily.sentenceCorrect++;
+        if (wasNew) this.daily.sentenceNew++;
+      } else {
+        this.daily.grammarDone++;
+        if (quality === 3) this.daily.grammarCorrect++;
+        if (wasNew) this.daily.grammarNew++;
+      }
+      save(STORAGE_KEYS.daily, this.daily);
+      if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
+      else save(STORAGE_KEYS.grammar, this.grammar);
+      this.syncToGist();
+
+      this.studyIndex++;
+      if (this.studyIndex >= this.studyQueue.length) {
+        this.toast('本次学习完成！');
+        this.goPage('dashboard');
+      } else {
+        this.renderStudyCard();
+      }
+    }
+
+    goPrev() {
+      if (this.studyIndex > 0) {
+        this.studyIndex--;
+        this.renderStudyCard();
+      }
+    }
+
+    goNext() {
+      if (this.studyIndex < this.studyQueue.length - 1) {
+        this.studyIndex++;
+        this.renderStudyCard();
+      } else {
+        this.toast('已经是最后一句了');
+      }
+    }
+
+    updateNavButtons() {
+      const prevBtn = document.getElementById('btn-prev');
+      const nextBtn = document.getElementById('btn-next');
+      if (prevBtn) prevBtn.disabled = this.studyIndex <= 0;
+      if (nextBtn) nextBtn.disabled = this.studyIndex >= this.studyQueue.length - 1;
+      if (prevBtn) prevBtn.style.opacity = prevBtn.disabled ? '0.4' : '1';
+      if (nextBtn) nextBtn.style.opacity = nextBtn.disabled ? '0.4' : '1';
+    }
+
+    endStudy() {
+      this.goPage('dashboard');
+    }
+
+    async pasteFromClipboard(textareaId) {
+      const el = document.getElementById(textareaId);
+      if (!el) return;
+      if (!navigator.clipboard || !navigator.clipboard.readText) {
+        this.toast('当前浏览器不支持剪贴板读取，请手动粘贴');
+        return;
+      }
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text) {
+          this.toast('剪贴板为空');
+          return;
+        }
+        el.value = text;
+        this.toast('已从剪贴板粘贴');
+      } catch (e) {
+        this.toast('无法读取剪贴板，请检查权限或手动粘贴');
+      }
+    }
+
+    // Data management
+    exportData() {
+      const data = {
+        sentences: this.sentences,
+        grammar: this.grammar,
+        settings: this.settings,
+        records: this.records,
+        daily: this.daily,
+        exportedAt: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'english-memory-backup-' + this.today + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      this.toast('备份已下载');
+    }
+
+    importData(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (data.sentences) { this.sentences = data.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
+          if (data.grammar) { this.grammar = data.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
+          if (data.settings) { this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings); save(STORAGE_KEYS.settings, this.settings); this.applySettingsUI(); }
+          if (data.records) { this.records = data.records; save(STORAGE_KEYS.records, this.records); }
+          if (data.daily) { this.daily = data.daily; save(STORAGE_KEYS.daily, this.daily); }
+          this.toast('数据恢复成功');
+          this.refreshDashboard();
+        } catch(err) {
+          this.toast('文件格式错误');
+        }
+        input.value = '';
+      };
+      reader.readAsText(file);
+    }
+
+    resetData() {
+      if (!confirm('确定清空所有数据吗？此操作不可恢复！建议先导出备份。')) return;
+      this.sentences = []; this.grammar = []; this.records = {}; this.daily = { date: this.today };
+      this.settings = Object.assign({}, DEFAULT_SETTINGS);
+      Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+      save(STORAGE_KEYS.settings, this.settings);
+      this.applySettingsUI();
+      this.refreshDashboard();
+      this.toast('数据已重置');
+    }
+
+    // Gist sync
+    _gistHeaders() {
+      return {
+        'Authorization': 'token ' + this.settings.gistToken,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      };
+    }
+
+    _gistFileName() {
+      return 'english-memory-data.json';
+    }
+
+    _getAllData() {
+      return {
+        sentences: this.sentences,
+        grammar: this.grammar,
+        settings: this.settings,
+        records: this.records,
+        daily: this.daily,
+        syncedAt: new Date().toISOString()
+      };
+    }
+
+    async syncToGist() {
+      const statusEl = document.getElementById('gist-status');
+      if (!this.settings.gistToken) {
+        if (statusEl) statusEl.textContent = '请先填写 GitHub Token';
+        return;
+      }
+      if (statusEl) statusEl.textContent = '正在上传到 Gist...';
+
+      const content = JSON.stringify(this._getAllData(), null, 2);
+      const payload = {
+        description: '英语记忆助手数据同步',
+        public: false,
+        files: { [this._gistFileName()]: { content } }
+      };
+
+      try {
+        let url = 'https://api.github.com/gists';
+        let method = 'POST';
+        if (this.settings.gistId) {
+          url = 'https://api.github.com/gists/' + this.settings.gistId;
+          method = 'PATCH';
+        }
+        const res = await fetch(url, { method, headers: this._gistHeaders(), body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || '上传失败');
+        }
+        if (!this.settings.gistId && data.id) {
+          this.settings.gistId = data.id;
+          document.getElementById('setting-gist-id').value = data.id;
+          save(STORAGE_KEYS.settings, this.settings);
+        }
+        if (statusEl) statusEl.textContent = '上传成功！' + new Date().toLocaleTimeString();
+        this.toast('已同步到 Gist');
+      } catch (e) {
+        if (statusEl) statusEl.textContent = '上传失败: ' + e.message;
+        this.toast('Gist 同步失败');
+      }
+    }
+
+    async syncFromGist(silent) {
+      const statusEl = document.getElementById('gist-status');
+      if (!this.settings.gistId || !this.settings.gistToken) {
+        if (!silent && statusEl) statusEl.textContent = '请先填写 Gist ID 和 Token';
+        return;
+      }
+      if (!silent && statusEl) statusEl.textContent = '正在从 Gist 下载...';
+
+      try {
+        const res = await fetch('https://api.github.com/gists/' + this.settings.gistId, {
+          headers: this._gistHeaders()
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || '下载失败');
+
+        const file = data.files && data.files[this._gistFileName()];
+        if (!file || !file.content) throw new Error('Gist 中未找到数据文件');
+
+        const remote = JSON.parse(file.content);
+        if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
+        if (remote.grammar) { this.grammar = remote.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
+        if (remote.records) { this.records = remote.records; save(STORAGE_KEYS.records, this.records); }
+        if (remote.daily) { this.daily = remote.daily; save(STORAGE_KEYS.daily, this.daily); }
+        // Keep local settings for gistId/token but merge other fields
+        if (remote.settings) {
+          const keepGistId = this.settings.gistId;
+          const keepToken = this.settings.gistToken;
+          this.settings = Object.assign({}, DEFAULT_SETTINGS, remote.settings);
+          this.settings.gistId = keepGistId;
+          this.settings.gistToken = keepToken;
+          save(STORAGE_KEYS.settings, this.settings);
+          this.applySettingsUI();
+        }
+
+        this.refreshDashboard();
+        if (this.currentPage === 'sentences') this.renderSentenceList();
+        if (this.currentPage === 'grammar') this.renderGrammarList();
+        if (!silent) {
+          if (statusEl) statusEl.textContent = '下载成功！' + new Date().toLocaleTimeString();
+          this.toast('已从 Gist 同步数据');
+        }
+      } catch (e) {
+        if (!silent) {
+          if (statusEl) statusEl.textContent = '下载失败: ' + e.message;
+          this.toast('Gist 同步失败');
+        }
+      }
+    }
+
+    toast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 2000);
+    }
+  }
+
+  window.app = new App();
+})();
+</script>
+</body>
+</html>
