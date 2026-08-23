@@ -337,11 +337,15 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
         </div>
         <input type="password" id="setting-gist-token" placeholder="ghp_xxxxxxxx" style="width:180px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;" onchange="app.saveSettings()">
       </div>
-      <div style="display:flex;gap:10px;margin-top:12px;">
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.syncToGist()">手动上传到 Gist</button>
         <button class="btn btn-outline" onclick="app.syncFromGist()">从 Gist 下载</button>
       </div>
       <div id="gist-status" style="font-size:13px;color:var(--text-light);margin-top:8px;text-align:center;"></div>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+        <button class="btn btn-outline btn-block" onclick="app.generateQuickLink()">生成快捷链接（保存到书签）</button>
+        <div id="quick-link" style="font-size:12px;color:var(--text-light);margin-top:8px;word-break:break-all;display:none;"></div>
+      </div>
     </div>
     <div class="card">
       <div class="card-title">数据管理</div>
@@ -470,6 +474,9 @@ const DEFAULT_SETTINGS = {
       this.initNav();
       this.applySettingsUI();
       this.refreshDashboard();
+
+      // Check URL params for Gist credentials (for quick bookmark access)
+      this.parseUrlParams();
 
       // Auto sync from Gist on load if configured
       if (this.settings.gistId && this.settings.gistToken) {
@@ -1013,6 +1020,40 @@ const DEFAULT_SETTINGS = {
         input.value = '';
       };
       reader.readAsText(file);
+    }
+
+    parseUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      const gistId = params.get('gistId');
+      const token = params.get('token');
+      if (gistId && token) {
+        this.settings.gistId = gistId;
+        this.settings.gistToken = token;
+        save(STORAGE_KEYS.settings, this.settings);
+        this.applySettingsUI();
+        this.toast('已通过快捷链接自动填充 Gist 配置');
+        // Clean URL to avoid exposing credentials in history
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    }
+
+    generateQuickLink() {
+      const gistId = this.settings.gistId;
+      const token = this.settings.gistToken;
+      if (!gistId || !token) {
+        this.toast('请先填写 Gist ID 和 Token');
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('gistId', gistId);
+      url.searchParams.set('token', token);
+      const quickLink = url.toString();
+      const el = document.getElementById('quick-link');
+      el.textContent = quickLink;
+      el.style.display = 'block';
+      this.toast('快捷链接已生成，请复制并保存到书签');
     }
 
     resetData() {
