@@ -1046,7 +1046,7 @@ const DEFAULT_SETTINGS = {
         this.toast('请先填写 Gist ID 和 Token');
         return;
       }
-      const url = new URL(window.location.href);
+      const url = new URL('https://huibo-ch.github.io/english-memory/');
       url.searchParams.set('gistId', gistId);
       url.searchParams.set('token', token);
       const quickLink = url.toString();
