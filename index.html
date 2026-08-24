@@ -1144,10 +1144,16 @@ const DEFAULT_SETTINGS = {
           headers: this._gistHeaders()
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.message || '下载失败');
+        if (!res.ok) {
+          let msg = data.message || 'HTTP ' + res.status;
+          if (res.status === 401) msg = 'Token 无效或已过期 (401)';
+          if (res.status === 403) msg = 'Token 没有 Gist 权限 (403)';
+          if (res.status === 404) msg = 'Gist ID 不存在 (404)';
+          throw new Error(msg);
+        }
 
         const file = data.files && data.files[this._gistFileName()];
-        if (!file || !file.content) throw new Error('Gist 中未找到数据文件');
+        if (!file || !file.content) throw new Error('Gist 中未找到数据文件「' + this._gistFileName() + '」，请先在电脑端点击「手动上传到 Gist」');
 
         const remote = JSON.parse(file.content);
         if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
@@ -1174,9 +1180,11 @@ const DEFAULT_SETTINGS = {
         }
       } catch (e) {
         if (!silent) {
-          if (statusEl) statusEl.textContent = '下载失败: ' + e.message;
-          this.toast('Gist 同步失败');
+          const msg = '下载失败: ' + e.message;
+          if (statusEl) statusEl.textContent = msg;
+          this.toast(msg);
         }
+        console.error('syncFromGist error:', e);
       }
     }
 
