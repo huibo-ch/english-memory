@@ -1040,6 +1040,7 @@ const DEFAULT_SETTINGS = {
     }
 
     generateQuickLink() {
+      this.saveSettings(); // ensure latest input values are saved
       const gistId = this.settings.gistId;
       const token = this.settings.gistToken;
       if (!gistId || !token) {
@@ -1092,6 +1093,7 @@ const DEFAULT_SETTINGS = {
     }
 
     async syncToGist() {
+      this.saveSettings(); // ensure latest input values are saved
       const statusEl = document.getElementById('gist-status');
       if (!this.settings.gistToken) {
         if (statusEl) statusEl.textContent = '请先填写 GitHub Token';
@@ -1132,6 +1134,7 @@ const DEFAULT_SETTINGS = {
     }
 
     async syncFromGist(silent) {
+      this.saveSettings(); // ensure latest input values are saved
       const statusEl = document.getElementById('gist-status');
       if (!this.settings.gistId || !this.settings.gistToken) {
         if (!silent && statusEl) statusEl.textContent = '请先填写 Gist ID 和 Token';
