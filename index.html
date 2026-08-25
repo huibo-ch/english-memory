@@ -1082,10 +1082,13 @@ const DEFAULT_SETTINGS = {
     }
 
     _getAllData() {
+      // Remove gistToken from synced data to prevent GitHub secret scanning auto-revocation
+      const safeSettings = Object.assign({}, this.settings);
+      delete safeSettings.gistToken;
       return {
         sentences: this.sentences,
         grammar: this.grammar,
-        settings: this.settings,
+        settings: safeSettings,
         records: this.records,
         daily: this.daily,
         syncedAt: new Date().toISOString()
