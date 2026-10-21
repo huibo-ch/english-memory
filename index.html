@@ -190,6 +190,7 @@
   <div class="nav" id="nav">
     <button class="nav-btn active" data-page="dashboard">仪表盘</button>
     <button class="nav-btn" data-page="sentences">句子</button>
+    <button class="nav-btn" data-page="words">单词</button>
     <button class="nav-btn" data-page="grammar">语法</button>
     <button class="nav-btn" data-page="settings">设置</button>
   </div>
@@ -199,12 +200,20 @@
       <div class="dash-card" onclick="app.goStudy('sentence')">
         <div class="label">句子 · 待复习</div>
         <div class="count" id="dash-sentence-review">0</div>
-        <div class="sub" id="dash-sentence-new">新学 0 / 上限 <span class="limit">20</span></div>
+        <div class="sub" id="dash-sentence-new">已背诵 0 · 未背诵 0</div>
+        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('sentence')">＋ 选择新学</button>
       </div>
       <div class="dash-card" onclick="app.goStudy('grammar')">
         <div class="label">语法 · 待复习</div>
         <div class="count" id="dash-grammar-review">0</div>
-        <div class="sub" id="dash-grammar-new">新学 0 / 上限 <span class="limit">20</span></div>
+        <div class="sub" id="dash-grammar-new">已背诵 0 · 未背诵 0</div>
+        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('grammar')">＋ 选择新学</button>
+      </div>
+      <div class="dash-card" onclick="app.goStudy('word')">
+        <div class="label">单词 · 待复习</div>
+        <div class="count" id="dash-word-review">0</div>
+        <div class="sub" id="dash-word-new">已背诵 0 · 未背诵 0</div>
+        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('word')">＋ 选择新学</button>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
@@ -217,6 +226,7 @@
     <div class="card">
       <div class="card-title">快速操作</div>
       <button class="btn btn-outline btn-block" onclick="app.goPage('sentences')">管理句子素材</button>
+      <button class="btn btn-outline btn-block" onclick="app.goPage('words')">管理单词素材</button>
       <button class="btn btn-outline btn-block" onclick="app.goPage('grammar')">管理语法素材</button>
     </div>
   </div>
@@ -236,7 +246,35 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
     </div>
     <div class="card">
       <div class="card-title">句子列表 <span class="badge" id="sentence-count">0</span></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.openNewPicker('sentence')">📚 选择新学</button>
+        <span id="sentence-pool-stats" style="font-size:13px;color:var(--text-light);">已背诵 0 · 未背诵 0</span>
+      </div>
       <div id="sentence-list"></div>
+    </div>
+  </div>
+
+  <div id="page-words" style="display:none;">
+    <div class="card">
+      <div class="card-title">批量添加单词</div>
+      <div class="upload-hint">每行一条，格式：单词 | 释义 | 音标（音标可选，用 | 分隔）</div>
+      <textarea class="upload-box" id="word-input" placeholder="invoice | 发票 | ˈɪnvɔɪs
+expense | 费用；开销 | ɪkˈspens
+revenue | 收入；营收 | ˈrevənjuː
+..."></textarea>
+      <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.importWords()">导入</button>
+        <button class="btn btn-outline" onclick="app.pasteFromClipboard('word-input')">📋 从剪贴板粘贴</button>
+        <button class="btn btn-outline" onclick="document.getElementById('word-input').value=''">清空</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">单词列表 <span class="badge" id="word-count">0</span></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.openNewPicker('word')">📚 选择新学</button>
+        <span id="word-pool-stats" style="font-size:13px;color:var(--text-light);">已背诵 0 · 未背诵 0</span>
+      </div>
+      <div id="word-list"></div>
     </div>
   </div>
 
@@ -253,6 +291,10 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
     </div>
     <div class="card">
       <div class="card-title">语法列表 <span class="badge" id="grammar-count">0</span></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="app.openNewPicker('grammar')">📚 选择新学</button>
+        <span id="grammar-pool-stats" style="font-size:13px;color:var(--text-light);">已背诵 0 · 未背诵 0</span>
+      </div>
       <div id="grammar-list"></div>
     </div>
   </div>
@@ -269,14 +311,41 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
       </div>
       <div class="setting-row">
         <div>
+          <div class="setting-label">每日新学单词</div>
+          <div class="setting-desc">每天最多学习几个新单词</div>
+        </div>
+        <input type="number" id="setting-word-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
           <div class="setting-label">每日新学语法</div>
           <div class="setting-desc">每天最多学习几条新语法</div>
         </div>
         <input type="number" id="setting-grammar-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
       </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">每日复习上限</div>
+          <div class="setting-desc">每天最多复习到的到期内容，超出的自动顺延到明天（句子和语法各按此上限计算）</div>
+        </div>
+        <input type="number" id="setting-review-limit" min="5" max="500" value="30" onchange="app.saveSettings()">
+      </div>
     </div>
-    <div class="card">
-      <div class="card-title">句子学习模式</div>
+<div class="card">
+<div class="card-title">日期时区</div>
+<div class="setting-row">
+<div>
+<div class="setting-label">「今天」按哪个时区计算</div>
+<div class="setting-desc">决定每日新学上限重置和复习到期时间，与设备时区无关</div>
+</div>
+<select id="setting-day-tz" onchange="app.saveSettings()">
+<option value="Asia/Qatar">卡塔尔时间（UTC+3）</option>
+<option value="Asia/Shanghai">北京时间（UTC+8）</option>
+</select>
+</div>
+</div>
+<div class="card">
+<div class="card-title">句子学习模式</div>
       <div class="setting-row">
         <div>
           <div class="setting-label">启用英译中</div>
@@ -406,8 +475,9 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
   'use strict';
 
   const STORAGE_KEYS = {
-    sentences: 'em_sentences',
-    grammar: 'em_grammar',
+sentences: 'em_sentences',
+words: 'em_words',
+grammar: 'em_grammar',
     settings: 'em_settings',
     records: 'em_records',
     daily: 'em_daily'
@@ -415,18 +485,39 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
 
 const DEFAULT_SETTINGS = {
   sentenceLimit: 20,
+  wordLimit: 20,
   grammarLimit: 20,
   en2zh: 1,
   zh2en: 1,
   voiceLang: 'en-US',
   voiceRate: '1',
+  reviewLimit: 30,
+  dayTimezone: 'Asia/Qatar',
   gistId: '',
   gistToken: ''
 };
 
+// Timezone used for all "today" calculations (selectable in settings)
+let CURRENT_TZ = 'Asia/Qatar';
+
+  function tzParts(tz) {
+    try {
+      const s = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const p = s.split('-');
+      return { y: parseInt(p[0], 10), m: parseInt(p[1], 10), d: parseInt(p[2], 10) };
+    } catch (e) {
+      const d = new Date();
+      return { y: d.getFullYear(), m: d.getMonth()+1, d: d.getDate() };
+    }
+  }
+
+  function fmtDate(y, m, d) {
+    return y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+  }
+
   function nowDate() {
-    const d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const p = tzParts(CURRENT_TZ);
+    return fmtDate(p.y, p.m, p.d);
   }
 
   function parseDate(str) {
@@ -461,8 +552,10 @@ const DEFAULT_SETTINGS = {
       // Clean up legacy phonetic cache from old auto-lookup feature
       localStorage.removeItem('em_phonetic_cache');
       this.sentences = load(STORAGE_KEYS.sentences, []);
+this.words = load(STORAGE_KEYS.words, []);
       this.grammar = load(STORAGE_KEYS.grammar, []);
       this.settings = Object.assign({}, DEFAULT_SETTINGS, load(STORAGE_KEYS.settings, {}));
+CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.records = load(STORAGE_KEYS.records, {});
       this.daily = load(STORAGE_KEYS.daily, {});
       this.currentPage = 'dashboard';
@@ -478,15 +571,36 @@ const DEFAULT_SETTINGS = {
       // Check URL params for Gist credentials (for quick bookmark access)
       this.parseUrlParams();
 
-      // Auto sync from Gist on load if configured
-      if (this.settings.gistId && this.settings.gistToken) {
-        this.syncFromGist(true);
-      }
-    }
+// Auto sync from Gist on load if configured
+if (this.settings.gistId && this.settings.gistToken) {
+this.syncFromGist(true);
+}
+
+// Re-check date when page becomes visible/focused again (handles overnight open tabs)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) this.checkDateRoll(); });
+window.addEventListener('focus', () => this.checkDateRoll());
+setInterval(() => this.checkDateRoll(), 60000);
+}
+
+checkDateRoll() {
+const d = nowDate();
+if (d !== this.today) {
+this.today = d;
+this.ensureDaily();
+this.refreshDashboard();
+if (this.currentPage === 'sentences') this.renderSentenceList();
+if (this.currentPage === 'words') this.renderWordList();
+if (this.currentPage === 'grammar') this.renderGrammarList();
+if (this.currentPage === 'study' && this.studyQueue.length) {
+const queue = this.getDueItems(this.getItemsByType(this.studyType), this.studyType);
+if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
+}
+}
+}
 
     ensureDaily() {
       if (!this.daily.date || this.daily.date !== this.today) {
-        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0 };
+        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -499,50 +613,55 @@ const DEFAULT_SETTINGS = {
 
     goPage(page) {
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === page));
-      ['dashboard','sentences','grammar','settings','study'].forEach(p => {
+      ['dashboard','sentences','words','grammar','settings','study'].forEach(p => {
         const el = document.getElementById('page-' + p);
         if (el) el.style.display = (p === page) ? 'block' : 'none';
       });
       this.currentPage = page;
       if (page === 'dashboard') this.refreshDashboard();
-      if (page === 'sentences') this.renderSentenceList();
-      if (page === 'grammar') this.renderGrammarList();
+if (page === 'sentences') this.renderSentenceList();
+if (page === 'words') this.renderWordList();
+if (page === 'grammar') this.renderGrammarList();
     }
 
     applySettingsUI() {
       document.getElementById('setting-sentence-limit').value = this.settings.sentenceLimit;
+      document.getElementById('setting-word-limit').value = this.settings.wordLimit ?? 20;
       document.getElementById('setting-grammar-limit').value = this.settings.grammarLimit;
+      document.getElementById('setting-review-limit').value = this.settings.reviewLimit ?? 30;
       document.getElementById('setting-mode-en2zh').value = this.settings.en2zh;
       document.getElementById('setting-mode-zh2en').value = this.settings.zh2en;
-      document.getElementById('setting-voice-lang').value = this.settings.voiceLang;
-      document.getElementById('setting-voice-rate').value = this.settings.voiceRate;
+document.getElementById('setting-voice-lang').value = this.settings.voiceLang;
+document.getElementById('setting-voice-rate').value = this.settings.voiceRate;
+document.getElementById('setting-day-tz').value = this.settings.dayTimezone || 'Asia/Qatar';
       document.getElementById('setting-gist-id').value = this.settings.gistId || '';
       document.getElementById('setting-gist-token').value = this.settings.gistToken || '';
     }
 
     saveSettings() {
       this.settings.sentenceLimit = parseInt(document.getElementById('setting-sentence-limit').value) || 20;
+      this.settings.wordLimit = parseInt(document.getElementById('setting-word-limit').value) || 20;
       this.settings.grammarLimit = parseInt(document.getElementById('setting-grammar-limit').value) || 20;
+      this.settings.reviewLimit = parseInt(document.getElementById('setting-review-limit').value) || 30;
       this.settings.en2zh = parseInt(document.getElementById('setting-mode-en2zh').value);
       this.settings.zh2en = parseInt(document.getElementById('setting-mode-zh2en').value);
-      this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
-      this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
-      this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
-      this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
-      save(STORAGE_KEYS.settings, this.settings);
-      this.toast('设置已保存');
-      this.refreshDashboard();
-    }
+this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
+this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
+this.settings.dayTimezone = document.getElementById('setting-day-tz').value;
+this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
+this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
+save(STORAGE_KEYS.settings, this.settings);
+CURRENT_TZ = this.settings.dayTimezone;
+this.toast('设置已保存');
+this.checkDateRoll();
+this.refreshDashboard();
+}
 
     getDueItems(items, type) {
       const today = this.today;
-      const newLimit = type === 'sentence' ? this.settings.sentenceLimit : this.settings.grammarLimit;
-      const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
-      const remainingNew = Math.max(0, newLimit - alreadyNew);
-
       const due = [];
       items.forEach(it => {
-        if (!it.nextReview || it.nextReview <= today) {
+        if ((it.repetitions || 0) > 0 && (!it.nextReview || it.nextReview <= today)) {
           due.push(it);
         }
       });
@@ -555,42 +674,49 @@ const DEFAULT_SETTINGS = {
         return (a.repetitions || 0) - (b.repetitions || 0);
       });
 
-      // Split due into review items and new items
-      const reviewItems = due.filter(it => (it.repetitions || 0) > 0);
-      const dueNewItems = due.filter(it => (it.repetitions || 0) === 0);
-      const notStudiedNew = dueNewItems.filter(it => !this.records[it.id]);
-      const toAdd = notStudiedNew.slice(0, remainingNew);
-
-      // Merge new items and review items with interleaving
-      const out = [];
-      let ni = 0, ri = 0;
-      const total = toAdd.length + reviewItems.length;
-      const newInterval = toAdd.length > 0 ? Math.max(1, Math.floor(total / (toAdd.length + 1))) : 0;
-      while (ri < reviewItems.length || ni < toAdd.length) {
-        if (ni < toAdd.length && (out.length % (newInterval + 1) === newInterval || ri >= reviewItems.length)) {
-          out.push(toAdd[ni++]);
-        } else if (ri < reviewItems.length) {
-          out.push(reviewItems[ri++]);
-        }
+      // Apply daily review cap: defer overflow to tomorrow
+      const cap = this.settings.reviewLimit || 30;
+      const done = type === 'sentence' ? this.daily.sentenceDone : type === 'word' ? this.daily.wordDone : this.daily.grammarDone;
+      const newCnt = type === 'sentence' ? this.daily.sentenceNew : type === 'word' ? this.daily.wordNew : this.daily.grammarNew;
+      const alreadyReviewed = Math.max(0, (done || 0) - (newCnt || 0));
+      const remaining = Math.max(0, cap - alreadyReviewed);
+      if (due.length > remaining) {
+        const overflow = due.slice(remaining);
+        const tp = tzParts(CURRENT_TZ);
+        const tmr = new Date(tp.y, tp.m - 1, tp.d);
+        tmr.setDate(tmr.getDate() + 1);
+        const tmrStr = fmtDate(tmr.getFullYear(), tmr.getMonth() + 1, tmr.getDate());
+        overflow.forEach(it => { if (!it.nextReview || it.nextReview < tmrStr) it.nextReview = tmrStr; });
+        save(type === 'sentence' ? STORAGE_KEYS.sentences : type === 'word' ? STORAGE_KEYS.words : STORAGE_KEYS.grammar, items);
+        due.length = remaining;
       }
-      return out;
+      return due;
     }
+
+getItemsByType(type) {
+return type === 'sentence' ? this.sentences : type === 'word' ? this.words : this.grammar;
+}
 
     refreshDashboard() {
       const sDue = this.getDueItems(this.sentences, 'sentence');
       const gDue = this.getDueItems(this.grammar, 'grammar');
+      const wDue = this.getDueItems(this.words, 'word');
       document.getElementById('dash-sentence-review').textContent = sDue.length;
       document.getElementById('dash-grammar-review').textContent = gDue.length;
-      const sl = this.settings.sentenceLimit, gl = this.settings.grammarLimit;
-      document.querySelector('#dash-sentence-new .limit').textContent = sl;
-      document.querySelector('#dash-grammar-new .limit').textContent = gl;
+      document.getElementById('dash-word-review').textContent = wDue.length;
 
-      const sNew = this.daily.sentenceNew, gNew = this.daily.grammarNew;
-      document.getElementById('dash-sentence-new').childNodes[0].textContent = '新学 ' + sNew + ' / 上限 ';
-      document.getElementById('dash-grammar-new').childNodes[0].textContent = '新学 ' + gNew + ' / 上限 ';
+      const setPool = (learned, total, dashEl, statsEl) => {
+        const text = '已背诵 ' + learned + ' · 未背诵 ' + (total - learned);
+        document.getElementById(dashEl).textContent = text;
+        const se = document.getElementById(statsEl);
+        if (se) se.textContent = text;
+      };
+      setPool(this.sentences.filter(it => (it.repetitions || 0) > 0).length, this.sentences.length, 'dash-sentence-new', 'sentence-pool-stats');
+      setPool(this.grammar.filter(it => (it.repetitions || 0) > 0).length, this.grammar.length, 'dash-grammar-new', 'grammar-pool-stats');
+      setPool(this.words.filter(it => (it.repetitions || 0) > 0).length, this.words.length, 'dash-word-new', 'word-pool-stats');
 
-      const done = this.daily.sentenceDone + this.daily.grammarDone;
-      const total = sDue.length + gDue.length;
+      const done = (this.daily.sentenceDone || 0) + (this.daily.grammarDone || 0) + (this.daily.wordDone || 0);
+      const total = sDue.length + gDue.length + wDue.length;
       document.getElementById('today-done').textContent = done;
       document.getElementById('today-total').textContent = total;
     }
@@ -662,6 +788,87 @@ const DEFAULT_SETTINGS = {
       this.syncToGist();
     }
 
+    importWords() {
+      const raw = document.getElementById('word-input').value.trim();
+      if (!raw) return this.toast('请输入内容');
+      const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      let added = 0;
+      lines.forEach(line => {
+        const parts = line.split('|').map(p => p.trim());
+        let word = '', meaning = '', ph = '';
+        if (parts.length >= 3) { word = parts[0]; meaning = parts[1]; ph = parts[2]; }
+        else if (parts.length === 2) { word = parts[0]; meaning = parts[1]; }
+        else if (parts[0]) { word = parts[0]; meaning = ''; }
+        if (word) {
+          this.words.push({
+            id: uuid(), word: word, phonetic: ph, meaning: meaning,
+            createdAt: this.today,
+            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+          });
+          added++;
+        }
+      });
+      save(STORAGE_KEYS.words, this.words);
+      document.getElementById('word-input').value = '';
+      this.toast('成功导入 ' + added + ' 个单词，当前共 ' + this.words.length + ' 个');
+      this.renderWordList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    renderWordList() {
+      document.getElementById('word-count').textContent = this.words.length;
+      const el = document.getElementById('word-list');
+      if (!this.words.length) {
+        el.innerHTML = '<div class="empty-state"><div class="emoji">🔤</div>还没有单词，去上方添加吧</div>';
+        return;
+      }
+      el.innerHTML = this.words.map(w => `
+        <div class="list-item">
+          <div class="content">
+            <div style="font-weight:600;margin-bottom:4px;">${this.escape(w.word)}</div>
+            ${w.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-bottom:2px;">${this.escape(w.phonetic)}</div>` : ''}
+            <div style="color:var(--text-light);font-size:13px;">${this.escape(w.meaning)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(w.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (w.nextReview || '今天') + ' · 熟练度: ' + (w.repetitions || 0)}</div>
+          </div>
+          <div class="actions">
+            <button class="icon-btn" onclick="app.editWord('${w.id}')">✏️</button>
+            <button class="icon-btn" onclick="app.deleteWord('${w.id}')">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    deleteWord(id) {
+      if (!confirm('确定删除这个单词吗？')) return;
+      this.words = this.words.filter(w => w.id !== id);
+      save(STORAGE_KEYS.words, this.words);
+      this.renderWordList();
+      this.refreshDashboard();
+      this.syncToGist();
+    }
+
+    editWord(id) {
+      const w = this.words.find(x => x.id === id);
+      if (!w) return;
+      this.openModal('编辑单词', `
+        <div style="margin-bottom:10px;">单词</div>
+        <textarea id="edit-word" style="width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(w.word)}</textarea>
+        <div style="margin:12px 0 10px;">释义</div>
+        <textarea id="edit-meaning" style="width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(w.meaning || '')}</textarea>
+        <div style="margin:12px 0 10px;">音标（可选）</div>
+        <textarea id="edit-word-ph" style="width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(w.phonetic || '')}</textarea>
+      `, () => {
+        w.word = document.getElementById('edit-word').value.trim();
+        w.meaning = document.getElementById('edit-meaning').value.trim();
+        w.phonetic = document.getElementById('edit-word-ph').value.trim();
+        save(STORAGE_KEYS.words, this.words);
+        this.renderWordList();
+        this.closeModal();
+        this.syncToGist();
+      });
+    }
+
     renderSentenceList() {
       document.getElementById('sentence-count').textContent = this.sentences.length;
       const el = document.getElementById('sentence-list');
@@ -675,7 +882,7 @@ const DEFAULT_SETTINGS = {
             <div style="font-weight:600;margin-bottom:4px;">${this.escape(s.english)}</div>
             ${s.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-bottom:2px;">${this.escape(s.phonetic)}</div>` : ''}
             <div style="color:var(--text-light);font-size:13px;">${this.escape(s.chinese)}</div>
-            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">下次复习: ${s.nextReview || '今天'} · 熟练度: ${s.repetitions || 0}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(s.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (s.nextReview || '今天') + ' · 熟练度: ' + (s.repetitions || 0)}</div>
           </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editSentence('${s.id}')">✏️</button>
@@ -694,7 +901,10 @@ const DEFAULT_SETTINGS = {
       }
       el.innerHTML = this.grammar.map(g => `
         <div class="list-item">
-          <div class="content" style="white-space:pre-wrap;">${this.escape(g.rule)}</div>
+          <div class="content">
+            <div style="white-space:pre-wrap;">${this.escape(g.rule)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(g.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '熟练度: ' + (g.repetitions || 0)}</div>
+          </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editGrammar('${g.id}')">✏️</button>
             <button class="icon-btn" onclick="app.deleteGrammar('${g.id}')">🗑️</button>
@@ -778,20 +988,68 @@ const DEFAULT_SETTINGS = {
       if (this._modalConfirm) this._modalConfirm();
     }
 
-    // Study
-    goStudy(type) {
-      this.studyType = type;
-      const items = type === 'sentence' ? this.sentences : this.grammar;
-      const queue = this.getDueItems(items, type);
-      if (!queue.length) {
-        this.toast('今天没有需要复习的内容');
-        return;
-      }
-      this.studyQueue = queue;
-      this.studyIndex = 0;
-      this.goPage('study');
-      this.renderStudyCard();
-    }
+// Study
+goStudy(type) {
+this.studyType = type;
+const items = this.getItemsByType(type);
+const queue = this.getDueItems(items, type);
+if (!queue.length) {
+this.toast('今天没有需要复习的内容，可通过「选择新学」学习新内容');
+return;
+}
+this.studyQueue = queue;
+this.studyIndex = 0;
+this.goPage('study');
+this.renderStudyCard();
+}
+
+// Open picker modal to manually choose new items from the unlearned pool
+openNewPicker(type) {
+const items = this.getItemsByType(type);
+const pool = items.filter(it => (it.repetitions || 0) === 0);
+const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
+if (!pool.length) {
+this.toast('未背诵池是空的，先导入一些' + label + '吧');
+return;
+}
+const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
+const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">未背诵池共 ${pool.length} 条 · 今日已新学 ${alreadyNew} 条</div>` +
+pool.map(it => `
+<label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
+<input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;">
+<span style="font-size:14px;">${this.escape(type === 'sentence' ? it.english : type === 'word' ? it.word : (it.rule || '').split('\n')[0])}</span>
+</label>
+`).join('');
+this.openModal(`选择要新学的${label}`, body, () => {
+const checked = Array.from(document.querySelectorAll('#modal-body .new-pick:checked')).map(cb => cb.value);
+if (!checked.length) { this.toast('请先勾选要学习的内容'); return; }
+this.startStudyWithNew(type, checked);
+});
+}
+
+// Start a study session with manually chosen new items + due reviews interleaved
+startStudyWithNew(type, newIds) {
+const items = this.getItemsByType(type);
+const chosen = newIds.map(id => items.find(x => x.id === id)).filter(Boolean);
+const reviews = this.getDueItems(items, type);
+const out = [];
+let ni = 0, ri = 0;
+const total = chosen.length + reviews.length;
+const newInterval = chosen.length > 0 ? Math.max(1, Math.floor(total / (chosen.length + 1))) : 0;
+while (ri < reviews.length || ni < chosen.length) {
+if (ni < chosen.length && (out.length % (newInterval + 1) === newInterval || ri >= reviews.length)) {
+out.push(chosen[ni++]);
+} else if (ri < reviews.length) {
+out.push(reviews[ri++]);
+}
+}
+this.studyType = type;
+this.studyQueue = out;
+this.studyIndex = 0;
+this.closeModal();
+this.goPage('study');
+this.renderStudyCard();
+}
 
     renderStudyCard() {
       const total = this.studyQueue.length;
@@ -810,13 +1068,18 @@ const DEFAULT_SETTINGS = {
       }
       this.currentStudyMode = mode;
 
-      const label = isSentence
+      const isWord = this.studyType === 'word';
+      const label = isWord ? '单词 · 英译中'
+        : isSentence
         ? ('句子 · ' + (mode === 'en2zh' ? '英译中' : '中译英'))
         : '语法 · 回忆';
       document.getElementById('study-type-label').textContent = label;
 
       let prompt = '', answer = '';
-      if (isSentence) {
+      if (isWord) {
+        prompt = item.word;
+        answer = item.meaning || '(暂无释义)';
+      } else if (isSentence) {
         if (mode === 'en2zh') {
           prompt = item.english;
           answer = item.chinese || '(暂无释义)';
@@ -838,7 +1101,7 @@ const DEFAULT_SETTINGS = {
       // Audio button
       const audioWrap = document.getElementById('study-audio-wrap');
       const phoneticEl = document.getElementById('study-phonetic');
-      const englishText = isSentence ? item.english : '';
+      const englishText = isSentence ? item.english : isWord ? item.word : '';
       if (englishText) {
         audioWrap.innerHTML = `<button class="audio-btn" onclick="app.speak('${this.escapeAttr(englishText)}')">🔊 发音</button>`;
       } else {
@@ -847,7 +1110,7 @@ const DEFAULT_SETTINGS = {
 
       // Show user-provided phonetic if available
       if (phoneticEl) {
-        phoneticEl.textContent = (isSentence && item.phonetic) ? item.phonetic : '';
+        phoneticEl.textContent = ((isSentence || isWord) && item.phonetic) ? item.phonetic : '';
       }
 
       this.updateNavButtons();
@@ -903,15 +1166,20 @@ const DEFAULT_SETTINGS = {
       item.repetitions = repetitions;
       item.interval = interval;
       item.ease = ease;
-      const next = new Date();
+      const tp = tzParts(CURRENT_TZ);
+      const next = new Date(tp.y, tp.m - 1, tp.d);
       next.setDate(next.getDate() + interval);
-      item.nextReview = next.getFullYear() + '-' + String(next.getMonth()+1).padStart(2,'0') + '-' + String(next.getDate()).padStart(2,'0');
+      item.nextReview = fmtDate(next.getFullYear(), next.getMonth()+1, next.getDate());
 
       // Daily tracking
       if (isSentence) {
         this.daily.sentenceDone++;
         if (quality === 3) this.daily.sentenceCorrect++;
         if (wasNew) this.daily.sentenceNew++;
+      } else if (this.studyType === 'word') {
+        this.daily.wordDone++;
+        if (quality === 3) this.daily.wordCorrect++;
+        if (wasNew) this.daily.wordNew++;
       } else {
         this.daily.grammarDone++;
         if (quality === 3) this.daily.grammarCorrect++;
@@ -919,6 +1187,7 @@ const DEFAULT_SETTINGS = {
       }
       save(STORAGE_KEYS.daily, this.daily);
       if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
+      else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
       else save(STORAGE_KEYS.grammar, this.grammar);
       this.syncToGist();
 
@@ -1008,6 +1277,7 @@ const DEFAULT_SETTINGS = {
         try {
           const data = JSON.parse(e.target.result);
           if (data.sentences) { this.sentences = data.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
+if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words); }
           if (data.grammar) { this.grammar = data.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
           if (data.settings) { this.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings); save(STORAGE_KEYS.settings, this.settings); this.applySettingsUI(); }
           if (data.records) { this.records = data.records; save(STORAGE_KEYS.records, this.records); }
@@ -1087,6 +1357,7 @@ const DEFAULT_SETTINGS = {
       delete safeSettings.gistToken;
       return {
         sentences: this.sentences,
+        words: this.words,
         grammar: this.grammar,
         settings: safeSettings,
         records: this.records,
@@ -1163,6 +1434,7 @@ const DEFAULT_SETTINGS = {
 
         const remote = JSON.parse(file.content);
         if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
+if (remote.words) { this.words = remote.words; save(STORAGE_KEYS.words, this.words); }
         if (remote.grammar) { this.grammar = remote.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
         if (remote.records) { this.records = remote.records; save(STORAGE_KEYS.records, this.records); }
         if (remote.daily) { this.daily = remote.daily; save(STORAGE_KEYS.daily, this.daily); }
