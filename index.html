@@ -1089,24 +1089,25 @@ this.renderStudyCard();
 // Open picker modal to manually choose new items from the unlearned pool
 openNewPicker(type) {
 const items = this.getItemsByType(type);
-// Direction-aware sequential chain: en2zh mode only offers items ALREADY learned via zh2en (and vice versa)
+// Direction-aware: en2zh mode = sequential chain (only items ALREADY learned via zh2en);
+// zh2en mode = open pool (any item whose zh2en is unlearned, ignoring en2zh status)
 // all mode: any-direction-unlearned items are pickable (both tasks created)
 const pool = items.filter(it => {
 if (type === 'grammar') return !this.isItemLearned(it, type);
 this.migrateSrs(it);
 if (this.dirFilter === 'en2zh') return ((it.srs.en2zh.repetitions) || 0) === 0 && ((it.srs.zh2en.repetitions) || 0) > 0;
-if (this.dirFilter === 'zh2en') return ((it.srs.zh2en.repetitions) || 0) === 0 && ((it.srs.en2zh.repetitions) || 0) > 0;
+if (this.dirFilter === 'zh2en') return ((it.srs.zh2en.repetitions) || 0) === 0;
 return !this.isItemLearned(it, type);
 });
 const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
 if (!pool.length) {
 if (type !== 'grammar' && this.dirFilter === 'en2zh') this.toast('没有可选的' + label + '：英译中模式只显示已背过中译英的内容');
-else if (type !== 'grammar' && this.dirFilter === 'zh2en') this.toast('没有可选的' + label + '：中译英模式只显示已背过英译中的内容');
+else if (type !== 'grammar' && this.dirFilter === 'zh2en') this.toast('所有' + label + '的中译英都已背过');
 else this.toast('未背诵池是空的，先导入一些' + label + '吧');
 return;
 }
 const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
-const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '已背过英译中 · 待背中译英');
+const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '未背过中译英');
 const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · 今日已新学 ${alreadyNew} 条</div>` +
 pool.map(it => `
 <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
