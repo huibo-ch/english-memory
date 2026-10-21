@@ -195,8 +195,14 @@
     <button class="nav-btn" data-page="settings">设置</button>
   </div>
 
-  <div id="page-dashboard">
-    <div class="dash-grid">
+<div id="page-dashboard">
+<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+<span style="font-size:12px;color:var(--text-light);">背诵方向：</span>
+<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-all" onclick="app.setDirFilter('all')">全部</button>
+<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-en2zh" onclick="app.setDirFilter('en2zh')">英译中</button>
+<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-zh2en" onclick="app.setDirFilter('zh2en')">中译英</button>
+</div>
+<div class="dash-grid">
       <div class="dash-card" onclick="app.goStudy('sentence')">
         <div class="label">句子 · 待复习</div>
         <div class="count" id="dash-sentence-review">0</div>
@@ -802,6 +808,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       document.getElementById('today-zh2en').textContent = this.daily.zh2enDone || 0;
       document.getElementById('today-grammar').textContent = this.daily.grammarDone || 0;
       document.getElementById('today-total').textContent = total;
+      this.updateDirTabs();
     }
 
     // Import
@@ -1355,13 +1362,15 @@ const item = task.it;
     }
 
     updateDirTabs() {
-      ['all', 'en2zh', 'zh2en'].forEach(k => {
-        const btn = document.getElementById('dir-tab-' + k);
-        if (!btn) return;
-        const active = this.dirFilter === k;
-        btn.style.background = active ? 'var(--primary)' : '#fff';
-        btn.style.color = active ? '#fff' : 'var(--text)';
-        btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      ['dir-tab-', 'dash-dir-'].forEach(pre => {
+        ['all', 'en2zh', 'zh2en'].forEach(k => {
+          const btn = document.getElementById(pre + k);
+          if (!btn) return;
+          const active = this.dirFilter === k;
+          btn.style.background = active ? 'var(--primary)' : '#fff';
+          btn.style.color = active ? '#fff' : 'var(--text)';
+          btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+        });
       });
     }
 
