@@ -323,13 +323,27 @@ revenue | 收入；营收 | ˈrevənjuː
         </div>
         <input type="number" id="setting-grammar-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
       </div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">每日复习上限</div>
-          <div class="setting-desc">每天最多复习到的到期内容，超出的自动顺延到明天（句子和语法各按此上限计算）</div>
-        </div>
-        <input type="number" id="setting-review-limit" min="5" max="500" value="30" onchange="app.saveSettings()">
-      </div>
+<div class="setting-row">
+<div>
+<div class="setting-label">每日复习上限 · 英译中</div>
+<div class="setting-desc">句子的英译中与单词的英译中任务共用此上限，超出的自动顺延到明天</div>
+</div>
+<input type="number" id="setting-review-limit-en" min="5" max="500" value="30" onchange="app.saveSettings()">
+</div>
+<div class="setting-row">
+<div>
+<div class="setting-label">每日复习上限 · 中译英</div>
+<div class="setting-desc">句子的中译英与单词的中译英任务共用此上限，超出的自动顺延到明天</div>
+</div>
+<input type="number" id="setting-review-limit-zh" min="5" max="500" value="30" onchange="app.saveSettings()">
+</div>
+<div class="setting-row">
+<div>
+<div class="setting-label">每日复习上限 · 语法</div>
+<div class="setting-desc">语法复习每天最多条数，超出的自动顺延到明天</div>
+</div>
+<input type="number" id="setting-review-limit-grammar" min="5" max="500" value="30" onchange="app.saveSettings()">
+</div>
     </div>
 <div class="card">
 <div class="card-title">日期时区</div>
@@ -344,29 +358,6 @@ revenue | 收入；营收 | ˈrevənjuː
 </select>
 </div>
 </div>
-<div class="card">
-<div class="card-title">句子学习模式</div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">启用英译中</div>
-          <div class="setting-desc">显示英文，回忆中文释义</div>
-        </div>
-        <select id="setting-mode-en2zh" onchange="app.saveSettings()">
-          <option value="1">启用</option>
-          <option value="0">禁用</option>
-        </select>
-      </div>
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">启用中译英</div>
-          <div class="setting-desc">显示中文，回忆英文句子</div>
-        </div>
-        <select id="setting-mode-zh2en" onchange="app.saveSettings()">
-          <option value="1">启用</option>
-          <option value="0">禁用</option>
-        </select>
-      </div>
-    </div>
     <div class="card">
       <div class="card-title">发音设置</div>
       <div class="setting-row">
@@ -600,7 +591,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 
     ensureDaily() {
       if (!this.daily.date || this.daily.date !== this.today) {
-        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0 };
+        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -628,9 +619,9 @@ if (page === 'grammar') this.renderGrammarList();
       document.getElementById('setting-sentence-limit').value = this.settings.sentenceLimit;
       document.getElementById('setting-word-limit').value = this.settings.wordLimit ?? 20;
       document.getElementById('setting-grammar-limit').value = this.settings.grammarLimit;
-      document.getElementById('setting-review-limit').value = this.settings.reviewLimit ?? 30;
-      document.getElementById('setting-mode-en2zh').value = this.settings.en2zh;
-      document.getElementById('setting-mode-zh2en').value = this.settings.zh2en;
+document.getElementById('setting-review-limit-en').value = this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
+document.getElementById('setting-review-limit-zh').value = this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
+document.getElementById('setting-review-limit-grammar').value = this.settings.reviewLimitGrammar ?? 30;
 document.getElementById('setting-voice-lang').value = this.settings.voiceLang;
 document.getElementById('setting-voice-rate').value = this.settings.voiceRate;
 document.getElementById('setting-day-tz').value = this.settings.dayTimezone || 'Asia/Qatar';
@@ -642,9 +633,9 @@ document.getElementById('setting-day-tz').value = this.settings.dayTimezone || '
       this.settings.sentenceLimit = parseInt(document.getElementById('setting-sentence-limit').value) || 20;
       this.settings.wordLimit = parseInt(document.getElementById('setting-word-limit').value) || 20;
       this.settings.grammarLimit = parseInt(document.getElementById('setting-grammar-limit').value) || 20;
-      this.settings.reviewLimit = parseInt(document.getElementById('setting-review-limit').value) || 30;
-      this.settings.en2zh = parseInt(document.getElementById('setting-mode-en2zh').value);
-      this.settings.zh2en = parseInt(document.getElementById('setting-mode-zh2en').value);
+this.settings.reviewLimitEn = parseInt(document.getElementById('setting-review-limit-en').value) || 30;
+this.settings.reviewLimitZh = parseInt(document.getElementById('setting-review-limit-zh').value) || 30;
+this.settings.reviewLimitGrammar = parseInt(document.getElementById('setting-review-limit-grammar').value) || 30;
 this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
 this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
 this.settings.dayTimezone = document.getElementById('setting-day-tz').value;
@@ -660,41 +651,107 @@ this.refreshDashboard();
     getDueItems(items, type) {
       const today = this.today;
       const due = [];
-      items.forEach(it => {
-        if ((it.repetitions || 0) > 0 && (!it.nextReview || it.nextReview <= today)) {
-          due.push(it);
+      if (type === 'grammar') {
+        items.forEach(it => {
+          if ((it.repetitions || 0) > 0 && (!it.nextReview || it.nextReview <= today)) {
+            due.push({ it: it, dir: null });
+          }
+        });
+        due.sort((a, b) => {
+          const da = a.it.nextReview || '9999-99-99';
+          const db = b.it.nextReview || '9999-99-99';
+          if (da !== db) return da < db ? -1 : 1;
+          return (a.it.repetitions || 0) - (b.it.repetitions || 0);
+        });
+      } else {
+        // Sentence/word: each direction is an independent task
+        items.forEach(it => {
+          this.migrateSrs(it);
+          ['en2zh', 'zh2en'].forEach(dir => {
+            const s = it.srs[dir];
+            if ((s.repetitions || 0) > 0 && (!s.nextReview || s.nextReview <= today)) {
+              due.push({ it: it, dir: dir });
+            }
+          });
+        });
+        due.sort((a, b) => {
+          const da = a.it.srs[a.dir].nextReview || '9999-99-99';
+          const db = b.it.srs[b.dir].nextReview || '9999-99-99';
+          if (da !== db) return da < db ? -1 : 1;
+          return (a.it.srs[a.dir].repetitions || 0) - (b.it.srs[b.dir].repetitions || 0);
+        });
+      }
+
+      // Apply daily review caps per direction: defer overflow to tomorrow
+      if (type === 'grammar') {
+        const cap = this.settings.reviewLimitGrammar ?? 30;
+        const alreadyReviewed = Math.max(0, (this.daily.grammarDone || 0) - (this.daily.grammarNew || 0));
+        const remaining = Math.max(0, cap - alreadyReviewed);
+        if (due.length > remaining) {
+          this.deferTasks(due.slice(remaining), type);
+          due.length = remaining;
         }
-      });
-
-      // Sort due by nextReview ascending, then by repetitions ascending (harder first)
-      due.sort((a, b) => {
-        const da = a.nextReview || '9999-99-99';
-        const db = b.nextReview || '9999-99-99';
-        if (da !== db) return da < db ? -1 : 1;
-        return (a.repetitions || 0) - (b.repetitions || 0);
-      });
-
-      // Apply daily review cap: defer overflow to tomorrow
-      const cap = this.settings.reviewLimit || 30;
-      const done = type === 'sentence' ? this.daily.sentenceDone : type === 'word' ? this.daily.wordDone : this.daily.grammarDone;
-      const newCnt = type === 'sentence' ? this.daily.sentenceNew : type === 'word' ? this.daily.wordNew : this.daily.grammarNew;
-      const alreadyReviewed = Math.max(0, (done || 0) - (newCnt || 0));
-      const remaining = Math.max(0, cap - alreadyReviewed);
-      if (due.length > remaining) {
-        const overflow = due.slice(remaining);
-        const tp = tzParts(CURRENT_TZ);
-        const tmr = new Date(tp.y, tp.m - 1, tp.d);
-        tmr.setDate(tmr.getDate() + 1);
-        const tmrStr = fmtDate(tmr.getFullYear(), tmr.getMonth() + 1, tmr.getDate());
-        overflow.forEach(it => { if (!it.nextReview || it.nextReview < tmrStr) it.nextReview = tmrStr; });
-        save(type === 'sentence' ? STORAGE_KEYS.sentences : type === 'word' ? STORAGE_KEYS.words : STORAGE_KEYS.grammar, items);
-        due.length = remaining;
+      } else {
+        const capEn = this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
+        const capZh = this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
+        const remEn = Math.max(0, capEn - Math.max(0, (this.daily.en2zhDone || 0) - (this.daily.en2zhNew || 0)));
+        const remZh = Math.max(0, capZh - Math.max(0, (this.daily.zh2enDone || 0) - (this.daily.zh2enNew || 0)));
+        const keepEn = new Set(due.filter(t => t.dir === 'en2zh').slice(0, remEn));
+        const keepZh = new Set(due.filter(t => t.dir === 'zh2en').slice(0, remZh));
+        const overflowTasks = due.filter(t => !keepEn.has(t) && !keepZh.has(t));
+        if (overflowTasks.length) {
+          this.deferTasks(overflowTasks, type);
+          const kept = due.filter(t => keepEn.has(t) || keepZh.has(t));
+          due.length = 0;
+          kept.forEach(t => due.push(t));
+        }
       }
       return due;
     }
 
+    // Push tasks' next review to tomorrow and persist
+    deferTasks(tasks, type) {
+      const tp = tzParts(CURRENT_TZ);
+      const tmr = new Date(tp.y, tp.m - 1, tp.d);
+      tmr.setDate(tmr.getDate() + 1);
+      const tmrStr = fmtDate(tmr.getFullYear(), tmr.getMonth() + 1, tmr.getDate());
+      tasks.forEach(t => {
+        const s = t.dir ? t.it.srs[t.dir] : t.it;
+        if (!s.nextReview || s.nextReview < tmrStr) s.nextReview = tmrStr;
+      });
+      save(type === 'sentence' ? STORAGE_KEYS.sentences : type === 'word' ? STORAGE_KEYS.words : STORAGE_KEYS.grammar, this.getItemsByType(type));
+    }
+
 getItemsByType(type) {
 return type === 'sentence' ? this.sentences : type === 'word' ? this.words : this.grammar;
+}
+
+// Ensure legacy flat SRS fields are migrated to per-direction state
+migrateSrs(it) {
+if (!it.srs) {
+const legacy = { repetitions: it.repetitions || 0, interval: it.interval || 0, ease: it.ease || 2.5, nextReview: it.nextReview || nowDate() };
+it.srs = { en2zh: Object.assign({}, legacy), zh2en: Object.assign({}, legacy) };
+}
+return it;
+}
+
+// An item counts as learned if ANY direction has been studied
+isItemLearned(it, type) {
+if (type === 'grammar') return (it.repetitions || 0) > 0;
+this.migrateSrs(it);
+return ['en2zh', 'zh2en'].some(d => (it.srs[d].repetitions || 0) > 0);
+}
+
+// Meta line for list rendering
+taskMeta(it, type) {
+if (type === 'grammar') {
+return (it.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (it.nextReview || '今天') + ' · 熟练度: ' + (it.repetitions || 0);
+}
+this.migrateSrs(it);
+const fmt = (s, name) => (s.repetitions || 0) === 0
+? name + '未背'
+: name + '下次 ' + (s.nextReview || '今天') + ' · 熟' + (s.repetitions || 0);
+return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 ');
 }
 
     refreshDashboard() {
@@ -711,9 +768,10 @@ return type === 'sentence' ? this.sentences : type === 'word' ? this.words : thi
         const se = document.getElementById(statsEl);
         if (se) se.textContent = text;
       };
-      setPool(this.sentences.filter(it => (it.repetitions || 0) > 0).length, this.sentences.length, 'dash-sentence-new', 'sentence-pool-stats');
-      setPool(this.grammar.filter(it => (it.repetitions || 0) > 0).length, this.grammar.length, 'dash-grammar-new', 'grammar-pool-stats');
-      setPool(this.words.filter(it => (it.repetitions || 0) > 0).length, this.words.length, 'dash-word-new', 'word-pool-stats');
+      const learnedCount = (arr, type) => arr.filter(it => this.isItemLearned(it, type)).length;
+      setPool(learnedCount(this.sentences, 'sentence'), this.sentences.length, 'dash-sentence-new', 'sentence-pool-stats');
+      setPool(learnedCount(this.grammar, 'grammar'), this.grammar.length, 'dash-grammar-new', 'grammar-pool-stats');
+      setPool(learnedCount(this.words, 'word'), this.words.length, 'dash-word-new', 'word-pool-stats');
 
       const done = (this.daily.sentenceDone || 0) + (this.daily.grammarDone || 0) + (this.daily.wordDone || 0);
       const total = sDue.length + gDue.length + wDue.length;
@@ -829,7 +887,7 @@ return type === 'sentence' ? this.sentences : type === 'word' ? this.words : thi
             <div style="font-weight:600;margin-bottom:4px;">${this.escape(w.word)}</div>
             ${w.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-bottom:2px;">${this.escape(w.phonetic)}</div>` : ''}
             <div style="color:var(--text-light);font-size:13px;">${this.escape(w.meaning)}</div>
-            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(w.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (w.nextReview || '今天') + ' · 熟练度: ' + (w.repetitions || 0)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${this.taskMeta(w, 'word')}</div>
           </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editWord('${w.id}')">✏️</button>
@@ -882,7 +940,7 @@ return type === 'sentence' ? this.sentences : type === 'word' ? this.words : thi
             <div style="font-weight:600;margin-bottom:4px;">${this.escape(s.english)}</div>
             ${s.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-bottom:2px;">${this.escape(s.phonetic)}</div>` : ''}
             <div style="color:var(--text-light);font-size:13px;">${this.escape(s.chinese)}</div>
-            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(s.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (s.nextReview || '今天') + ' · 熟练度: ' + (s.repetitions || 0)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${this.taskMeta(s, 'sentence')}</div>
           </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editSentence('${s.id}')">✏️</button>
@@ -903,7 +961,7 @@ return type === 'sentence' ? this.sentences : type === 'word' ? this.words : thi
         <div class="list-item">
           <div class="content">
             <div style="white-space:pre-wrap;">${this.escape(g.rule)}</div>
-            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${(g.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '熟练度: ' + (g.repetitions || 0)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${this.taskMeta(g, 'grammar')}</div>
           </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editGrammar('${g.id}')">✏️</button>
@@ -1006,7 +1064,7 @@ this.renderStudyCard();
 // Open picker modal to manually choose new items from the unlearned pool
 openNewPicker(type) {
 const items = this.getItemsByType(type);
-const pool = items.filter(it => (it.repetitions || 0) === 0);
+const pool = items.filter(it => !this.isItemLearned(it, type));
 const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
 if (!pool.length) {
 this.toast('未背诵池是空的，先导入一些' + label + '吧');
@@ -1030,15 +1088,26 @@ this.startStudyWithNew(type, checked);
 // Start a study session with manually chosen new items + due reviews interleaved
 startStudyWithNew(type, newIds) {
 const items = this.getItemsByType(type);
-const chosen = newIds.map(id => items.find(x => x.id === id)).filter(Boolean);
+const chosenItems = newIds.map(id => items.find(x => x.id === id)).filter(Boolean);
+const chosenTasks = [];
+chosenItems.forEach(it => {
+if (type === 'grammar') {
+chosenTasks.push({ it: it, dir: null });
+} else {
+// Each selected item becomes TWO independent tasks
+this.migrateSrs(it);
+chosenTasks.push({ it: it, dir: 'en2zh' });
+chosenTasks.push({ it: it, dir: 'zh2en' });
+}
+});
 const reviews = this.getDueItems(items, type);
 const out = [];
 let ni = 0, ri = 0;
-const total = chosen.length + reviews.length;
-const newInterval = chosen.length > 0 ? Math.max(1, Math.floor(total / (chosen.length + 1))) : 0;
-while (ri < reviews.length || ni < chosen.length) {
-if (ni < chosen.length && (out.length % (newInterval + 1) === newInterval || ri >= reviews.length)) {
-out.push(chosen[ni++]);
+const total = chosenTasks.length + reviews.length;
+const newInterval = chosenTasks.length > 0 ? Math.max(1, Math.floor(total / (chosenTasks.length + 1))) : 0;
+while (ri < reviews.length || ni < chosenTasks.length) {
+if (ni < chosenTasks.length && (out.length % (newInterval + 1) === newInterval || ri >= reviews.length)) {
+out.push(chosenTasks[ni++]);
 } else if (ri < reviews.length) {
 out.push(reviews[ri++]);
 }
@@ -1054,39 +1123,23 @@ this.renderStudyCard();
     renderStudyCard() {
       const total = this.studyQueue.length;
       document.getElementById('study-progress').textContent = (this.studyIndex + 1) + ' / ' + total;
-      const item = this.studyQueue[this.studyIndex];
+      const task = this.studyQueue[this.studyIndex];
+      const item = task.it;
       const isSentence = this.studyType === 'sentence';
-
-      // For sentences, randomly choose direction based on settings
-      let mode = 'en2zh';
-      if (isSentence) {
-        const modes = [];
-        if (this.settings.en2zh) modes.push('en2zh');
-        if (this.settings.zh2en) modes.push('zh2en');
-        if (modes.length === 0) { modes.push('en2zh'); }
-        mode = modes[Math.floor(Math.random() * modes.length)];
-      }
-      this.currentStudyMode = mode;
-
       const isWord = this.studyType === 'word';
-      const label = isWord ? '单词 · 英译中'
-        : isSentence
-        ? ('句子 · ' + (mode === 'en2zh' ? '英译中' : '中译英'))
-        : '语法 · 回忆';
+      const dir = task.dir; // 'en2zh' | 'zh2en' | null (grammar)
+
+      const typeName = isSentence ? '句子' : isWord ? '单词' : '语法';
+      const label = dir ? (typeName + ' · ' + (dir === 'en2zh' ? '英译中' : '中译英')) : '语法 · 回忆';
       document.getElementById('study-type-label').textContent = label;
 
       let prompt = '', answer = '';
-      if (isWord) {
-        prompt = item.word;
-        answer = item.meaning || '(暂无释义)';
-      } else if (isSentence) {
-        if (mode === 'en2zh') {
-          prompt = item.english;
-          answer = item.chinese || '(暂无释义)';
-        } else {
-          prompt = item.chinese || '(暂无释义)';
-          answer = item.english;
-        }
+      if (dir === 'en2zh') {
+        prompt = isSentence ? item.english : item.word;
+        answer = (isSentence ? item.chinese : item.meaning) || '(暂无释义)';
+      } else if (dir === 'zh2en') {
+        prompt = (isSentence ? item.chinese : item.meaning) || '(暂无释义)';
+        answer = isSentence ? item.english : item.word;
       } else {
         prompt = '回忆这条语法规则';
         answer = item.rule;
@@ -1098,19 +1151,19 @@ this.renderStudyCard();
       document.getElementById('study-actions-reveal').style.display = 'block';
       document.getElementById('study-actions-grade').style.display = 'none';
 
-      // Audio button
+      // Audio button: only when the English side is the prompt (speaking would spoil the answer otherwise)
       const audioWrap = document.getElementById('study-audio-wrap');
       const phoneticEl = document.getElementById('study-phonetic');
-      const englishText = isSentence ? item.english : isWord ? item.word : '';
+      const englishText = (isSentence || isWord) && dir === 'en2zh' ? (isSentence ? item.english : item.word) : '';
       if (englishText) {
         audioWrap.innerHTML = `<button class="audio-btn" onclick="app.speak('${this.escapeAttr(englishText)}')">🔊 发音</button>`;
       } else {
         audioWrap.innerHTML = '';
       }
 
-      // Show user-provided phonetic if available
+      // Show user-provided phonetic only when English is the prompt
       if (phoneticEl) {
-        phoneticEl.textContent = ((isSentence || isWord) && item.phonetic) ? item.phonetic : '';
+        phoneticEl.textContent = ((isSentence || isWord) && dir === 'en2zh' && item.phonetic) ? item.phonetic : '';
       }
 
       this.updateNavButtons();
@@ -1136,14 +1189,16 @@ this.renderStudyCard();
     }
 
     grade(quality) {
-      const item = this.studyQueue[this.studyIndex];
+      const task = this.studyQueue[this.studyIndex];
+      const item = task.it;
       const isSentence = this.studyType === 'sentence';
+      const state = task.dir ? item.srs[task.dir] : item;
 
-      // Track if this was a new item before we mutate it
-      const wasNew = (item.repetitions || 0) === 0;
+      // Track if this was a new task before we mutate it
+      const wasNew = (state.repetitions || 0) === 0;
 
       // SRS update
-      let { repetitions = 0, interval = 0, ease = 2.5 } = item;
+      let { repetitions = 0, interval = 0, ease = 2.5 } = state;
       if (quality === 1) {
         repetitions = 0;
         interval = 1;
@@ -1163,13 +1218,13 @@ this.renderStudyCard();
         repetitions++;
         ease += 0.1;
       }
-      item.repetitions = repetitions;
-      item.interval = interval;
-      item.ease = ease;
+      state.repetitions = repetitions;
+      state.interval = interval;
+      state.ease = ease;
       const tp = tzParts(CURRENT_TZ);
       const next = new Date(tp.y, tp.m - 1, tp.d);
       next.setDate(next.getDate() + interval);
-      item.nextReview = fmtDate(next.getFullYear(), next.getMonth()+1, next.getDate());
+      state.nextReview = fmtDate(next.getFullYear(), next.getMonth()+1, next.getDate());
 
       // Daily tracking
       if (isSentence) {
@@ -1184,6 +1239,14 @@ this.renderStudyCard();
         this.daily.grammarDone++;
         if (quality === 3) this.daily.grammarCorrect++;
         if (wasNew) this.daily.grammarNew++;
+      }
+      // Direction-level counters for per-direction review caps
+      if (task.dir === 'en2zh') {
+        this.daily.en2zhDone = (this.daily.en2zhDone || 0) + 1;
+        if (wasNew) this.daily.en2zhNew = (this.daily.en2zhNew || 0) + 1;
+      } else if (task.dir === 'zh2en') {
+        this.daily.zh2enDone = (this.daily.zh2enDone || 0) + 1;
+        if (wasNew) this.daily.zh2enNew = (this.daily.zh2enNew || 0) + 1;
       }
       save(STORAGE_KEYS.daily, this.daily);
       if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
