@@ -196,11 +196,15 @@
   </div>
 
 <div id="page-dashboard">
+<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+<span style="display:inline-flex;align-items:center;font-family:'Kaiti SC','KaiTi','STKaiti',cursive;font-size:14px;color:#6B5A1E;background:#FFF7DC;padding:8px 16px;border-radius:12px;box-shadow:0 4px 14px rgba(120,100,30,0.15);max-width:100%;">
+英译中的待背诵内容全部来源于中译英已背诵池子
+</span>
+</div>
 <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
 <span style="font-size:12px;color:var(--text-light);">背诵方向：</span>
-<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-all" onclick="app.setDirFilter('all')">全部</button>
-<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-en2zh" onclick="app.setDirFilter('en2zh')">英译中</button>
 <button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-zh2en" onclick="app.setDirFilter('zh2en')">中译英</button>
+<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-en2zh" title="英译中的待背诵内容全部来源于中译英已背诵池子" onclick="app.setDirFilter('en2zh')">英译中</button>
 </div>
 <div class="dash-grid">
       <div class="dash-card" onclick="app.goStudy('sentence')">
@@ -426,11 +430,6 @@ revenue | 收入；营收 | ˈrevənjuː
 
   <div id="page-study" style="display:none;">
     <div class="card">
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-all" onclick="app.setDirFilter('all')">全部</button>
-        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-en2zh" onclick="app.setDirFilter('en2zh')">英译中</button>
-        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-zh2en" onclick="app.setDirFilter('zh2en')">中译英</button>
-      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
         <span id="study-progress" style="font-size:13px;color:var(--text-light);">1 / 10</span>
@@ -497,7 +496,7 @@ const DEFAULT_SETTINGS = {
   voiceRate: '1',
   reviewLimit: 30,
   dayTimezone: 'Asia/Qatar',
-  dirFilter: 'all',
+  dirFilter: 'zh2en',
   gistId: '',
   gistToken: ''
 };
@@ -567,7 +566,7 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.studyQueue = [];
       this.studyIndex = 0;
       this.studyType = '';
-      this.dirFilter = this.settings.dirFilter || 'all';
+      this.dirFilter = this.settings.dirFilter === 'en2zh' ? 'en2zh' : 'zh2en';
       this.today = nowDate();
       this.ensureDaily();
       this.initNav();
@@ -666,12 +665,13 @@ this.refreshDashboard();
     getDueItems(items, type) {
       const today = this.today;
       const due = [];
-      if (type === 'grammar') {
-        items.forEach(it => {
-          if ((it.repetitions || 0) > 0 && (!it.nextReview || it.nextReview <= today)) {
-            due.push({ it: it, dir: null });
-          }
-        });
+if (type === 'grammar') {
+items.forEach(it => {
+const studied = (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
+if (studied && (!it.nextReview || it.nextReview <= today)) {
+due.push({ it: it, dir: null });
+}
+});
         due.sort((a, b) => {
           const da = a.it.nextReview || '9999-99-99';
           const db = b.it.nextReview || '9999-99-99';
@@ -684,7 +684,8 @@ this.refreshDashboard();
           this.migrateSrs(it);
           ['en2zh', 'zh2en'].forEach(dir => {
             const s = it.srs[dir];
-            if ((s.repetitions || 0) > 0 && (!s.nextReview || s.nextReview <= today)) {
+            const studied = (s.repetitions || 0) > 0 || (s.interval || 0) > 0;
+            if (studied && (!s.nextReview || s.nextReview <= today)) {
               due.push({ it: it, dir: dir });
             }
           });
@@ -750,20 +751,27 @@ it.srs = { en2zh: Object.assign({}, legacy), zh2en: Object.assign({}, legacy) };
 return it;
 }
 
-// An item counts as learned if ANY direction has been studied
+// An item counts as learned if ANY direction has been studied (incl. forgotten: interval>0)
 isItemLearned(it, type) {
-if (type === 'grammar') return (it.repetitions || 0) > 0;
+if (type === 'grammar') return (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
 this.migrateSrs(it);
-return ['en2zh', 'zh2en'].some(d => (it.srs[d].repetitions || 0) > 0);
+return ['en2zh', 'zh2en'].some(d => this.dirStudied(it, d));
+}
+
+// A direction counts as studied once it has SRS history (even if forgotten: repetitions reset to 0 but interval stays 1+)
+dirStudied(it, dir) {
+this.migrateSrs(it);
+const s = it.srs[dir];
+return (s.repetitions || 0) > 0 || (s.interval || 0) > 0;
 }
 
 // Meta line for list rendering
 taskMeta(it, type) {
 if (type === 'grammar') {
-return (it.repetitions || 0) === 0 ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (it.nextReview || '今天') + ' · 熟练度: ' + (it.repetitions || 0);
+return ((it.repetitions || 0) === 0 && (it.interval || 0) === 0) ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (it.nextReview || '今天') + ' · 熟练度: ' + (it.repetitions || 0);
 }
 this.migrateSrs(it);
-const fmt = (s, name) => (s.repetitions || 0) === 0
+const fmt = (s, name) => ((s.repetitions || 0) === 0 && (s.interval || 0) === 0)
 ? name + '未背'
 : name + '下次 ' + (s.nextReview || '今天') + ' · 熟' + (s.repetitions || 0);
 return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 ');
@@ -789,7 +797,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       // Sentence/word: show pool stats per direction (each direction is an independent pool)
       const self = this;
       const dirPoolText = (arr, dir, name) => {
-        const learned = arr.filter(it => { self.migrateSrs(it); return ((it.srs[dir].repetitions) || 0) > 0; }).length;
+        const learned = arr.filter(it => self.dirStudied(it, dir)).length;
         return name + '：已背 ' + learned + ' · 未背 ' + (arr.length - learned);
       };
       const setPool2 = (arr, dashEl, statsEl) => {
@@ -1102,8 +1110,8 @@ const items = this.getItemsByType(type);
 const pool = items.filter(it => {
 if (type === 'grammar') return !this.isItemLearned(it, type);
 this.migrateSrs(it);
-if (this.dirFilter === 'en2zh') return ((it.srs.en2zh.repetitions) || 0) === 0 && ((it.srs.zh2en.repetitions) || 0) > 0;
-if (this.dirFilter === 'zh2en') return ((it.srs.zh2en.repetitions) || 0) === 0;
+if (this.dirFilter === 'en2zh') return !this.dirStudied(it, 'en2zh') && this.dirStudied(it, 'zh2en');
+if (this.dirFilter === 'zh2en') return !this.dirStudied(it, 'zh2en');
 return !this.isItemLearned(it, type);
 });
 const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
@@ -1362,8 +1370,8 @@ const item = task.it;
     }
 
     updateDirTabs() {
-      ['dir-tab-', 'dash-dir-'].forEach(pre => {
-        ['all', 'en2zh', 'zh2en'].forEach(k => {
+      ['dash-dir-'].forEach(pre => {
+        ['en2zh', 'zh2en'].forEach(k => {
           const btn = document.getElementById(pre + k);
           if (!btn) return;
           const active = this.dirFilter === k;
