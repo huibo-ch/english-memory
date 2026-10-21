@@ -318,9 +318,14 @@ revenue | 收入；营收 | ˈrevənjuː
     </div>
   </div>
 
-  <div id="page-settings" style="display:none;">
-    <div class="card">
-      <div class="card-title">每日上限</div>
+<div id="page-settings" style="display:none;">
+<div class="card">
+<div class="card-title">数据管理</div>
+<button class="btn btn-outline" style="width:100%;color:#d63031;border-color:#f0b6b6;" onclick="app.resetProgress()">清空全部背诵进度</button>
+<div style="font-size:12px;color:var(--text-light);margin-top:8px;">所有句子/单词/语法的背诵记录归零（两个方向的进度、复习计划、今日统计），导入的内容和账号设置保留，清空后自动同步到云端</div>
+</div>
+<div class="card">
+<div class="card-title">每日上限</div>
       <div class="setting-row">
         <div>
           <div class="setting-label">每日新学句子</div>
@@ -612,9 +617,33 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 }
 }
 
+    // Wipe all study progress (SRS states + daily stats), keep imported content and settings
+    resetProgress() {
+      if (!confirm('确定清空全部背诵进度吗？\n\n导入的内容会保留，但所有背诵记录（两个方向的进度、复习计划、今日统计）将全部归零。\n清空后会自动上传到云端覆盖旧数据。')) return;
+      const fresh = () => ({ repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today });
+      const freshSrs = () => ({ en2zh: fresh(), zh2en: fresh() });
+      const wipeSrsFields = it => { delete it.repetitions; delete it.interval; delete it.ease; delete it.nextReview; };
+      this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
+      this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
+      this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
+      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0 };
+      save(STORAGE_KEYS.sentences, this.sentences);
+      save(STORAGE_KEYS.words, this.words);
+      save(STORAGE_KEYS.grammar, this.grammar);
+      save(STORAGE_KEYS.daily, this.daily);
+      this.studyQueue = [];
+      this.studyIndex = 0;
+      this.refreshDashboard();
+      this.renderSentenceList();
+      this.renderWordList();
+      this.renderGrammarList();
+      this.syncToGist();
+      this.toast('背诵进度已全部清零，正在同步到云端');
+    }
+
     ensureDaily() {
-      if (!this.daily.date || this.daily.date !== this.today) {
-        this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0 };
+if (!this.daily.date || this.daily.date !== this.today) {
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -1130,9 +1159,14 @@ else if (type !== 'grammar' && this.dirFilter === 'zh2en') this.toast('所有' +
 else this.toast('未背诵池是空的，先导入一些' + label + '吧');
 return;
 }
-const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
+const alreadyNew = type === 'sentence'
+? '英译中 ' + (this.daily.senEnNew || 0) + ' · 中译英 ' + (this.daily.senZhNew || 0)
+: type === 'word'
+? '英译中 ' + (this.daily.wordEnNew || 0) + ' · 中译英 ' + (this.daily.wordZhNew || 0)
+: String(this.daily.grammarNew || 0);
+const newLabel = type === 'grammar' ? '今日已新学 ' + alreadyNew + ' 条' : '今日已新学：' + alreadyNew;
 const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '未背过中译英');
-const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · 今日已新学 ${alreadyNew} 条</div>` +
+const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · ${newLabel}</div>` +
 pool.map(it => `
 <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
 <input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;">
@@ -1293,11 +1327,19 @@ const item = task.it;
       if (isSentence) {
         this.daily.sentenceDone++;
         if (quality === 3) this.daily.sentenceCorrect++;
-        if (wasNew) this.daily.sentenceNew++;
+        if (wasNew) {
+          this.daily.sentenceNew++;
+          if (task.dir === 'en2zh') this.daily.senEnNew = (this.daily.senEnNew || 0) + 1;
+          else if (task.dir === 'zh2en') this.daily.senZhNew = (this.daily.senZhNew || 0) + 1;
+        }
       } else if (this.studyType === 'word') {
         this.daily.wordDone++;
         if (quality === 3) this.daily.wordCorrect++;
-        if (wasNew) this.daily.wordNew++;
+        if (wasNew) {
+          this.daily.wordNew++;
+          if (task.dir === 'en2zh') this.daily.wordEnNew = (this.daily.wordEnNew || 0) + 1;
+          else if (task.dir === 'zh2en') this.daily.wordZhNew = (this.daily.wordZhNew || 0) + 1;
+        }
       } else {
         this.daily.grammarDone++;
         if (quality === 3) this.daily.grammarCorrect++;
