@@ -200,7 +200,7 @@
       <div class="dash-card" onclick="app.goStudy('sentence')">
         <div class="label">句子 · 待复习</div>
         <div class="count" id="dash-sentence-review">0</div>
-        <div class="sub" id="dash-sentence-new">已背诵 0 · 未背诵 0</div>
+        <div class="sub" id="dash-sentence-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('sentence')">＋ 选择新学</button>
       </div>
       <div class="dash-card" onclick="app.goStudy('grammar')">
@@ -212,16 +212,18 @@
       <div class="dash-card" onclick="app.goStudy('word')">
         <div class="label">单词 · 待复习</div>
         <div class="count" id="dash-word-review">0</div>
-        <div class="sub" id="dash-word-new">已背诵 0 · 未背诵 0</div>
+        <div class="sub" id="dash-word-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('word')">＋ 选择新学</button>
       </div>
     </div>
     <div class="card" style="margin-top:16px;">
       <div class="card-title">今日概览</div>
-      <div style="display:flex;justify-content:space-around;text-align:center;">
-        <div><div style="font-size:28px;font-weight:700;color:var(--success);" id="today-done">0</div><div style="font-size:12px;color:var(--text-light);">已完成</div></div>
-        <div><div style="font-size:28px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
-      </div>
+<div style="display:flex;justify-content:space-around;text-align:center;">
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-en2zh">0</div><div style="font-size:12px;color:var(--text-light);">英译中已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-zh2en">0</div><div style="font-size:12px;color:var(--text-light);">中译英已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-grammar">0</div><div style="font-size:12px;color:var(--text-light);">语法已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
+</div>
     </div>
     <div class="card">
       <div class="card-title">快速操作</div>
@@ -248,7 +250,7 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
       <div class="card-title">句子列表 <span class="badge" id="sentence-count">0</span></div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.openNewPicker('sentence')">📚 选择新学</button>
-        <span id="sentence-pool-stats" style="font-size:13px;color:var(--text-light);">已背诵 0 · 未背诵 0</span>
+        <span id="sentence-pool-stats" style="font-size:13px;color:var(--text-light);">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</span>
       </div>
       <div id="sentence-list"></div>
     </div>
@@ -272,7 +274,7 @@ revenue | 收入；营收 | ˈrevənjuː
       <div class="card-title">单词列表 <span class="badge" id="word-count">0</span></div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.openNewPicker('word')">📚 选择新学</button>
-        <span id="word-pool-stats" style="font-size:13px;color:var(--text-light);">已背诵 0 · 未背诵 0</span>
+        <span id="word-pool-stats" style="font-size:13px;color:var(--text-light);">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</span>
       </div>
       <div id="word-list"></div>
     </div>
@@ -418,6 +420,11 @@ revenue | 收入；营收 | ˈrevənjuː
 
   <div id="page-study" style="display:none;">
     <div class="card">
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-all" onclick="app.setDirFilter('all')">全部</button>
+        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-en2zh" onclick="app.setDirFilter('en2zh')">英译中</button>
+        <button class="btn" style="padding:4px 14px;font-size:12px;" id="dir-tab-zh2en" onclick="app.setDirFilter('zh2en')">中译英</button>
+      </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
         <span id="study-progress" style="font-size:13px;color:var(--text-light);">1 / 10</span>
@@ -484,6 +491,7 @@ const DEFAULT_SETTINGS = {
   voiceRate: '1',
   reviewLimit: 30,
   dayTimezone: 'Asia/Qatar',
+  dirFilter: 'all',
   gistId: '',
   gistToken: ''
 };
@@ -553,6 +561,7 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.studyQueue = [];
       this.studyIndex = 0;
       this.studyType = '';
+      this.dirFilter = this.settings.dirFilter || 'all';
       this.today = nowDate();
       this.ensureDaily();
       this.initNav();
@@ -769,13 +778,29 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         if (se) se.textContent = text;
       };
       const learnedCount = (arr, type) => arr.filter(it => this.isItemLearned(it, type)).length;
-      setPool(learnedCount(this.sentences, 'sentence'), this.sentences.length, 'dash-sentence-new', 'sentence-pool-stats');
       setPool(learnedCount(this.grammar, 'grammar'), this.grammar.length, 'dash-grammar-new', 'grammar-pool-stats');
-      setPool(learnedCount(this.words, 'word'), this.words.length, 'dash-word-new', 'word-pool-stats');
+
+      // Sentence/word: show pool stats per direction (each direction is an independent pool)
+      const self = this;
+      const dirPoolText = (arr, dir, name) => {
+        const learned = arr.filter(it => { self.migrateSrs(it); return ((it.srs[dir].repetitions) || 0) > 0; }).length;
+        return name + '：已背 ' + learned + ' · 未背 ' + (arr.length - learned);
+      };
+      const setPool2 = (arr, dashEl, statsEl) => {
+        const text = dirPoolText(arr, 'en2zh', '英译中') + '<br>' + dirPoolText(arr, 'zh2en', '中译英');
+        const de = document.getElementById(dashEl);
+        if (de) de.innerHTML = text;
+        const se = document.getElementById(statsEl);
+        if (se) se.innerHTML = text;
+      };
+      setPool2(this.sentences, 'dash-sentence-new', 'sentence-pool-stats');
+      setPool2(this.words, 'dash-word-new', 'word-pool-stats');
 
       const done = (this.daily.sentenceDone || 0) + (this.daily.grammarDone || 0) + (this.daily.wordDone || 0);
       const total = sDue.length + gDue.length + wDue.length;
-      document.getElementById('today-done').textContent = done;
+      document.getElementById('today-en2zh').textContent = this.daily.en2zhDone || 0;
+      document.getElementById('today-zh2en').textContent = this.daily.zh2enDone || 0;
+      document.getElementById('today-grammar').textContent = this.daily.grammarDone || 0;
       document.getElementById('today-total').textContent = total;
     }
 
@@ -1050,7 +1075,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 goStudy(type) {
 this.studyType = type;
 const items = this.getItemsByType(type);
-const queue = this.getDueItems(items, type);
+const queue = this.filterByDir(this.getDueItems(items, type), type);
 if (!queue.length) {
 this.toast('今天没有需要复习的内容，可通过「选择新学」学习新内容');
 return;
@@ -1064,14 +1089,25 @@ this.renderStudyCard();
 // Open picker modal to manually choose new items from the unlearned pool
 openNewPicker(type) {
 const items = this.getItemsByType(type);
-const pool = items.filter(it => !this.isItemLearned(it, type));
+// Direction-aware sequential chain: en2zh mode only offers items ALREADY learned via zh2en (and vice versa)
+// all mode: any-direction-unlearned items are pickable (both tasks created)
+const pool = items.filter(it => {
+if (type === 'grammar') return !this.isItemLearned(it, type);
+this.migrateSrs(it);
+if (this.dirFilter === 'en2zh') return ((it.srs.en2zh.repetitions) || 0) === 0 && ((it.srs.zh2en.repetitions) || 0) > 0;
+if (this.dirFilter === 'zh2en') return ((it.srs.zh2en.repetitions) || 0) === 0 && ((it.srs.en2zh.repetitions) || 0) > 0;
+return !this.isItemLearned(it, type);
+});
 const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
 if (!pool.length) {
-this.toast('未背诵池是空的，先导入一些' + label + '吧');
+if (type !== 'grammar' && this.dirFilter === 'en2zh') this.toast('没有可选的' + label + '：英译中模式只显示已背过中译英的内容');
+else if (type !== 'grammar' && this.dirFilter === 'zh2en') this.toast('没有可选的' + label + '：中译英模式只显示已背过英译中的内容');
+else this.toast('未背诵池是空的，先导入一些' + label + '吧');
 return;
 }
 const alreadyNew = type === 'sentence' ? this.daily.sentenceNew : this.daily.grammarNew;
-const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">未背诵池共 ${pool.length} 条 · 今日已新学 ${alreadyNew} 条</div>` +
+const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '已背过英译中 · 待背中译英');
+const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · 今日已新学 ${alreadyNew} 条</div>` +
 pool.map(it => `
 <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
 <input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;">
@@ -1094,13 +1130,13 @@ chosenItems.forEach(it => {
 if (type === 'grammar') {
 chosenTasks.push({ it: it, dir: null });
 } else {
-// Each selected item becomes TWO independent tasks
+// Selected directions follow the current filter (default: both directions)
 this.migrateSrs(it);
-chosenTasks.push({ it: it, dir: 'en2zh' });
-chosenTasks.push({ it: it, dir: 'zh2en' });
+if (this.dirFilter !== 'zh2en') chosenTasks.push({ it: it, dir: 'en2zh' });
+if (this.dirFilter !== 'en2zh') chosenTasks.push({ it: it, dir: 'zh2en' });
 }
 });
-const reviews = this.getDueItems(items, type);
+const reviews = this.filterByDir(this.getDueItems(items, type), type);
 const out = [];
 let ni = 0, ri = 0;
 const total = chosenTasks.length + reviews.length;
@@ -1120,11 +1156,12 @@ this.goPage('study');
 this.renderStudyCard();
 }
 
-    renderStudyCard() {
-      const total = this.studyQueue.length;
-      document.getElementById('study-progress').textContent = (this.studyIndex + 1) + ' / ' + total;
-      const task = this.studyQueue[this.studyIndex];
-      const item = task.it;
+renderStudyCard() {
+const total = this.studyQueue.length;
+document.getElementById('study-progress').textContent = (this.studyIndex + 1) + ' / ' + total;
+const task = this.studyQueue[this.studyIndex];
+if (!task) return;
+const item = task.it;
       const isSentence = this.studyType === 'sentence';
       const isWord = this.studyType === 'word';
       const dir = task.dir; // 'en2zh' | 'zh2en' | null (grammar)
@@ -1166,6 +1203,7 @@ this.renderStudyCard();
         phoneticEl.textContent = ((isSentence || isWord) && dir === 'en2zh' && item.phonetic) ? item.phonetic : '';
       }
 
+      this.updateDirTabs();
       this.updateNavButtons();
     }
 
@@ -1290,6 +1328,40 @@ this.renderStudyCard();
 
     endStudy() {
       this.goPage('dashboard');
+    }
+
+    // Direction filter: 'all' | 'en2zh' | 'zh2en' (grammar tasks have no direction and are always kept)
+    filterByDir(queue, type) {
+      if (type === 'grammar' || this.dirFilter === 'all') return queue;
+      return queue.filter(t => t.dir === this.dirFilter);
+    }
+
+    setDirFilter(d) {
+      this.dirFilter = d;
+      this.settings.dirFilter = d;
+      save(STORAGE_KEYS.settings, this.settings);
+      this.updateDirTabs();
+      if (this.currentPage !== 'study' || !this.studyQueue.length) return;
+      const before = this.studyQueue.slice(0, this.studyIndex);
+      const after = this.studyQueue.slice(this.studyIndex).filter(t => !t.dir || this.dirFilter === 'all' || t.dir === this.dirFilter);
+      this.studyQueue = before.concat(after);
+      if (this.studyIndex >= this.studyQueue.length) {
+        this.toast('当前筛选下没有剩余任务');
+        this.goPage('dashboard');
+        return;
+      }
+      this.renderStudyCard();
+    }
+
+    updateDirTabs() {
+      ['all', 'en2zh', 'zh2en'].forEach(k => {
+        const btn = document.getElementById('dir-tab-' + k);
+        if (!btn) return;
+        const active = this.dirFilter === k;
+        btn.style.background = active ? 'var(--primary)' : '#fff';
+        btn.style.color = active ? '#fff' : 'var(--text)';
+        btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
+      });
     }
 
     async pasteFromClipboard(textareaId) {
