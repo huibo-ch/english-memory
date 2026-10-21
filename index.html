@@ -170,13 +170,20 @@
       opacity: 0; pointer-events: none; transition: opacity 0.2s;
     }
     .modal-overlay.show { opacity: 1; pointer-events: auto; }
-    .modal {
-      background: var(--card); border-radius: 16px; padding: 24px;
-      width: 90%; max-width: 420px; max-height: 80vh; overflow-y: auto;
-    }
-    .modal h3 { margin-bottom: 16px; }
-    .modal textarea { width: 100%; min-height: 120px; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; font-size: 14px; resize: vertical; }
-    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.modal {
+background: var(--card); border-radius: 16px; padding: 20px 24px;
+width: 90%; max-width: 420px; max-height: 80vh;
+display: flex; flex-direction: column;
+}
+.modal-head {
+display: flex; align-items: center; justify-content: space-between; gap: 10px;
+flex: none; padding-bottom: 12px; margin-bottom: 12px;
+border-bottom: 1.5px solid var(--border);
+}
+.modal-head h3 { margin: 0; font-size: 17px; }
+.modal textarea { width: 100%; min-height: 120px; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px; font-size: 14px; resize: vertical; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.modal-body { overflow-y: auto; flex: 1; min-height: 0; }
 
     @media (max-width: 480px) {
       .dash-grid { grid-template-columns: 1fr; }
@@ -196,7 +203,7 @@
   </div>
 
 <div id="page-dashboard">
-<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+<div style="display:flex;justify-content:flex-start;margin-bottom:10px;">
 <span style="display:inline-flex;align-items:center;font-family:'Kaiti SC','KaiTi','STKaiti',cursive;font-size:14px;color:#6B5A1E;background:#FFF7DC;padding:8px 16px;border-radius:12px;box-shadow:0 4px 14px rgba(120,100,30,0.15);max-width:100%;">
 英译中的待背诵内容全部来源于中译英已背诵池子
 </span>
@@ -463,14 +470,16 @@ revenue | 收入；营收 | ˈrevənjuː
 <div class="toast" id="toast"></div>
 
 <div class="modal-overlay" id="modal-overlay">
-  <div class="modal">
-    <h3 id="modal-title">编辑</h3>
-    <div id="modal-body"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline" onclick="app.closeModal()">取消</button>
-      <button class="btn btn-primary" onclick="app.confirmModal()">保存</button>
-    </div>
-  </div>
+<div class="modal">
+<div class="modal-head">
+<h3 id="modal-title">编辑</h3>
+<div class="modal-actions">
+<button class="btn btn-outline" onclick="app.closeModal()">取消</button>
+<button class="btn btn-primary" onclick="app.confirmModal()">保存</button>
+</div>
+</div>
+<div id="modal-body" class="modal-body"></div>
+</div>
 </div>
 
 <script>
