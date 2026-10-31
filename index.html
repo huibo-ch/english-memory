@@ -626,7 +626,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
       this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
-      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0 };
+      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
       save(STORAGE_KEYS.sentences, this.sentences);
       save(STORAGE_KEYS.words, this.words);
       save(STORAGE_KEYS.grammar, this.grammar);
@@ -643,7 +643,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 
     ensureDaily() {
 if (!this.daily.date || this.daily.date !== this.today) {
-this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0 };
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -1166,18 +1166,60 @@ const alreadyNew = type === 'sentence'
 : String(this.daily.grammarNew || 0);
 const newLabel = type === 'grammar' ? '今日已新学 ' + alreadyNew + ' 条' : '今日已新学：' + alreadyNew;
 const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '未背过中译英');
-const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · ${newLabel}</div>` +
+// Daily new-item cap (per module, across both directions) — counts tasks CREATED today (incl. unfinished sessions)
+const limit = type === 'sentence' ? (this.settings.sentenceLimit || 20) : type === 'word' ? (this.settings.wordLimit || 20) : (this.settings.grammarLimit || 20);
+const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
+const usedToday = this.daily[pickedKey] || 0;
+const rem = Math.max(0, limit - usedToday);
+if (rem === 0) {
+this.toast('今日新学上限已用完（' + usedToday + '/' + limit + '），明天再来或在设置里调高每日上限');
+return;
+}
+this._pickerRemaining = rem;
+const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · ${newLabel} · 今日还可新学 ${rem} 条</div>` +
+`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+<span id="picker-count" style="font-size:13px;font-weight:600;color:var(--primary);">已选 0 条</span>
+<span style="flex:1;"></span>
+<input type="number" id="picker-rand-n" min="1" value="${Math.min(rem, pool.length)}" style="width:60px;border:1.5px solid var(--border);border-radius:8px;padding:4px 8px;font-size:13px;">
+<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;" onclick="app.randomPick()">随机选</button>
+</div>` +
 pool.map(it => `
 <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
-<input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;">
+<input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;" onchange="app.pickerChanged()">
 <span style="font-size:14px;">${this.escape(type === 'sentence' ? it.english : type === 'word' ? it.word : (it.rule || '').split('\n')[0])}</span>
 </label>
 `).join('');
 this.openModal(`选择要新学的${label}`, body, () => {
-const checked = Array.from(document.querySelectorAll('#modal-body .new-pick:checked')).map(cb => cb.value);
+let checked = Array.from(document.querySelectorAll('#modal-body .new-pick:checked')).map(cb => cb.value);
 if (!checked.length) { this.toast('请先勾选要学习的内容'); return; }
+if (checked.length > rem) {
+checked = checked.slice(0, rem);
+this.toast('超出今日上限，已截取前 ' + rem + ' 条');
+}
 this.startStudyWithNew(type, checked);
 });
+}
+
+// Live selected-count in picker
+pickerChanged() {
+const n = document.querySelectorAll('#modal-body .new-pick:checked').length;
+const el = document.getElementById('picker-count');
+if (el) el.textContent = '已选 ' + n + ' 条';
+}
+
+// Randomly tick N checkboxes, clamped to remaining daily allowance
+randomPick() {
+const cbs = Array.from(document.querySelectorAll('#modal-body .new-pick'));
+if (!cbs.length) return;
+const rem = this._pickerRemaining != null ? this._pickerRemaining : cbs.length;
+const input = document.getElementById('picker-rand-n');
+let n = parseInt(input && input.value, 10);
+if (!n || n < 1) n = rem;
+n = Math.min(n, rem, cbs.length);
+const shuffled = cbs.slice().sort(() => Math.random() - 0.5);
+cbs.forEach(cb => { cb.checked = false; });
+shuffled.slice(0, n).forEach(cb => { cb.checked = true; });
+this.pickerChanged();
 }
 
 // Start a study session with manually chosen new items + due reviews interleaved
@@ -1210,6 +1252,10 @@ out.push(reviews[ri++]);
 this.studyType = type;
 this.studyQueue = out;
 this.studyIndex = 0;
+// Count CREATED new tasks against the daily allowance immediately (even if not yet graded)
+const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
+this.daily[pickedKey] = (this.daily[pickedKey] || 0) + chosenTasks.length;
+save(STORAGE_KEYS.daily, this.daily);
 this.closeModal();
 this.goPage('study');
 this.renderStudyCard();
@@ -1533,12 +1579,15 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
 
     resetData() {
       if (!confirm('确定清空所有数据吗？此操作不可恢复！建议先导出备份。')) return;
-      this.sentences = []; this.grammar = []; this.records = {}; this.daily = { date: this.today };
+      this.sentences = []; this.words = []; this.grammar = []; this.records = {}; this.daily = { date: this.today };
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
       Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
       save(STORAGE_KEYS.settings, this.settings);
       this.applySettingsUI();
       this.refreshDashboard();
+      this.renderSentenceList();
+      this.renderWordList();
+      this.renderGrammarList();
       this.toast('数据已重置');
     }
 
