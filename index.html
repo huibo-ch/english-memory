@@ -590,9 +590,13 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       // Check URL params for Gist credentials (for quick bookmark access)
       this.parseUrlParams();
 
-// Auto sync from Gist on load if configured
+// Auto sync from Gist on load ONLY when local content is completely empty (first-time setup)
+// Never auto-download over existing local data: cloud may be stale and would wipe newer local items
 if (this.settings.gistId && this.settings.gistToken) {
-this.syncFromGist(true);
+  const localEmpty = this.sentences.length === 0 && this.words.length === 0 && this.grammar.length === 0;
+  if (localEmpty) {
+    this.syncFromGist(true);
+  }
 }
 
 // Re-check date when page becomes visible/focused again (handles overnight open tabs)
@@ -1503,6 +1507,7 @@ const item = task.it;
     exportData() {
       const data = {
         sentences: this.sentences,
+        words: this.words,
         grammar: this.grammar,
         settings: this.settings,
         records: this.records,
@@ -1628,12 +1633,25 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       }
       if (statusEl) statusEl.textContent = '正在上传到 Gist...';
 
-      const content = JSON.stringify(this._getAllData(), null, 2);
+      // Split into multiple files: Gist API has a ~1MB per-file limit; a single
+      // file holding all data gets silently truncated (real incident: words[1534] cut off)
+      const safeSettings = Object.assign({}, this.settings);
+      delete safeSettings.gistToken;
       const payload = {
         description: '英语记忆助手数据同步',
         public: false,
-        files: { [this._gistFileName()]: { content } }
+        files: {
+          'em-sentences.json': { content: JSON.stringify(this.sentences, null, 2) },
+          'em-words.json': { content: JSON.stringify(this.words, null, 2) },
+          'em-grammar.json': { content: JSON.stringify(this.grammar, null, 2) },
+          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, records: this.records, daily: this.daily, syncedAt: new Date().toISOString() }, null, 2) }
+        }
       };
+      const tooBig = Object.entries(payload.files).find(([, f]) => f.content.length > 900000);
+      if (tooBig) {
+        if (statusEl) statusEl.textContent = '上传中止：' + tooBig[0] + ' 超过 Gist 单文件限制，请联系开发者拆分';
+        return;
+      }
 
       try {
         let url = 'https://api.github.com/gists';
@@ -1652,6 +1670,10 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
           document.getElementById('setting-gist-id').value = data.id;
           save(STORAGE_KEYS.settings, this.settings);
         }
+        // Best-effort cleanup of the legacy single-file data (pre-multi-file format)
+        try {
+          fetch(url, { method: 'PATCH', headers: this._gistHeaders(), body: JSON.stringify({ files: { 'english-memory-data.json': null } }) });
+        } catch (e2) { /* ignore */ }
         if (statusEl) statusEl.textContent = '上传成功！' + new Date().toLocaleTimeString();
         this.toast('已同步到 Gist');
       } catch (e) {
@@ -1682,10 +1704,25 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
           throw new Error(msg);
         }
 
-        const file = data.files && data.files[this._gistFileName()];
-        if (!file || !file.content) throw new Error('Gist 中未找到数据文件「' + this._gistFileName() + '」，请先在电脑端点击「手动上传到 Gist」');
-
-        const remote = JSON.parse(file.content);
+        // Prefer new multi-file format; fall back to legacy single file
+        const f = data.files || {};
+        const parseFile = (name) => { try { return f[name] && f[name].content ? JSON.parse(f[name].content) : null; } catch (e) { return null; } };
+        let remote = null;
+        if (f['em-meta.json'] && f['em-meta.json'].content) {
+          remote = {
+            sentences: parseFile('em-sentences.json'),
+            words: parseFile('em-words.json'),
+            grammar: parseFile('em-grammar.json')
+          };
+          const meta = parseFile('em-meta.json') || {};
+          remote.settings = meta.settings;
+          remote.records = meta.records;
+          remote.daily = meta.daily;
+        } else {
+          const legacy = f[this._gistFileName()];
+          if (!legacy || !legacy.content) throw new Error('Gist 中未找到数据文件，请先在电脑端点击「手动上传到 Gist」');
+          remote = JSON.parse(legacy.content);
+        }
         if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
 if (remote.words) { this.words = remote.words; save(STORAGE_KEYS.words, this.words); }
         if (remote.grammar) { this.grammar = remote.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
