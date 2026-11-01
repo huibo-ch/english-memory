@@ -867,7 +867,10 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const raw = document.getElementById('sentence-input').value.trim();
       if (!raw) return this.toast('请输入内容');
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
-      let added = 0;
+      const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const existing = new Set(this.sentences.map(it => norm(it.english)));
+      const batchSeen = new Set();
+      let added = 0, dup = 0;
       let i = 0;
       while (i < lines.length) {
         const line = lines[i];
@@ -888,17 +891,22 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
           i++;
         }
         if (en) {
-          this.sentences.push({
-            id: uuid(), english: en, chinese: zh, phonetic: ph,
-            createdAt: this.today,
-            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
-          });
-          added++;
+          const key = norm(en);
+          if (existing.has(key) || batchSeen.has(key)) { dup++; }
+          else {
+            existing.add(key); batchSeen.add(key);
+            this.sentences.push({
+              id: uuid(), english: en, chinese: zh, phonetic: ph,
+              createdAt: this.today,
+              repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+            });
+            added++;
+          }
         }
       }
       save(STORAGE_KEYS.sentences, this.sentences);
       document.getElementById('sentence-input').value = '';
-      this.toast('成功导入 ' + added + ' 条句子，当前共 ' + this.sentences.length + ' 条');
+      this.toast('成功导入 ' + added + ' 条句子' + (dup ? '，跳过重复 ' + dup + ' 条' : '') + '，当前共 ' + this.sentences.length + ' 条');
       this.renderSentenceList();
       this.refreshDashboard();
       this.syncToGist();
@@ -908,11 +916,17 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const raw = document.getElementById('grammar-input').value.trim();
       if (!raw) return this.toast('请输入内容');
       const blocks = raw.split(/===+/).map(b => b.trim()).filter(Boolean);
-      let added = 0;
+      const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const existing = new Set(this.grammar.map(it => norm(it.rule)));
+      const batchSeen = new Set();
+      let added = 0, dup = 0;
       blocks.forEach(block => {
         const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
         const text = lines.join('\n');
         if (text) {
+          const key = norm(text);
+          if (existing.has(key) || batchSeen.has(key)) { dup++; return; }
+          existing.add(key); batchSeen.add(key);
           this.grammar.push({
             id: uuid(), rule: text,
             createdAt: this.today,
@@ -923,7 +937,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       });
       save(STORAGE_KEYS.grammar, this.grammar);
       document.getElementById('grammar-input').value = '';
-      this.toast('成功导入 ' + added + ' 条语法，当前共 ' + this.grammar.length + ' 条');
+      this.toast('成功导入 ' + added + ' 条语法' + (dup ? '，跳过重复 ' + dup + ' 条' : '') + '，当前共 ' + this.grammar.length + ' 条');
       this.renderGrammarList();
       this.refreshDashboard();
       this.syncToGist();
@@ -933,7 +947,10 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const raw = document.getElementById('word-input').value.trim();
       if (!raw) return this.toast('请输入内容');
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
-      let added = 0;
+      const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
+      const existing = new Set(this.words.map(it => norm(it.word)));
+      const batchSeen = new Set();
+      let added = 0, dup = 0;
       lines.forEach(line => {
         const parts = line.split('|').map(p => p.trim());
         let word = '', meaning = '', ph = '';
@@ -941,6 +958,9 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         else if (parts.length === 2) { word = parts[0]; meaning = parts[1]; }
         else if (parts[0]) { word = parts[0]; meaning = ''; }
         if (word) {
+          const key = norm(word);
+          if (existing.has(key) || batchSeen.has(key)) { dup++; return; }
+          existing.add(key); batchSeen.add(key);
           this.words.push({
             id: uuid(), word: word, phonetic: ph, meaning: meaning,
             createdAt: this.today,
@@ -951,7 +971,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       });
       save(STORAGE_KEYS.words, this.words);
       document.getElementById('word-input').value = '';
-      this.toast('成功导入 ' + added + ' 个单词，当前共 ' + this.words.length + ' 个');
+      this.toast('成功导入 ' + added + ' 个单词' + (dup ? '，跳过重复 ' + dup + ' 个' : '') + '，当前共 ' + this.words.length + ' 个');
       this.renderWordList();
       this.refreshDashboard();
       this.syncToGist();
