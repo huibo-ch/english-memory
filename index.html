@@ -1641,13 +1641,15 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
         description: '英语记忆助手数据同步',
         public: false,
         files: {
-          'em-sentences.json': { content: JSON.stringify(this.sentences, null, 2) },
-          'em-words.json': { content: JSON.stringify(this.words, null, 2) },
-          'em-grammar.json': { content: JSON.stringify(this.grammar, null, 2) },
-          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, records: this.records, daily: this.daily, syncedAt: new Date().toISOString() }, null, 2) }
+          'em-sentences.json': { content: JSON.stringify(this.sentences) },
+          'em-words.json': { content: JSON.stringify(this.words) },
+          'em-grammar.json': { content: JSON.stringify(this.grammar) },
+          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, records: this.records, daily: this.daily, syncedAt: new Date().toISOString() }) }
         }
       };
-      const tooBig = Object.entries(payload.files).find(([, f]) => f.content.length > 900000);
+      // Gist limit is ~1MB per file measured in UTF-8 bytes (Chinese chars = 3 bytes each)
+      const enc = new TextEncoder();
+      const tooBig = Object.entries(payload.files).find(([, f]) => enc.encode(f.content).length > 950000);
       if (tooBig) {
         if (statusEl) statusEl.textContent = '上传中止：' + tooBig[0] + ' 超过 Gist 单文件限制，请联系开发者拆分';
         return;
