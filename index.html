@@ -451,6 +451,7 @@ revenue | 收入；营收 | ˈrevənjuː
         <div class="study-prompt" id="study-prompt"></div>
         <div class="phonetic-bar" id="study-phonetic">点击句子中的单词查看音标</div>
         <div class="study-answer hidden" id="study-answer" onclick="app.showAnswer()"></div>
+<div id="study-answer-extra" style="text-align:center;"></div>
         <div id="study-actions-reveal">
           <button class="btn btn-primary btn-block" onclick="app.showAnswer()" style="margin-top:20px;">显示答案</button>
         </div>
@@ -1294,6 +1295,7 @@ const item = task.it;
       document.getElementById('study-prompt').textContent = prompt;
       document.getElementById('study-answer').textContent = answer;
       document.getElementById('study-answer').classList.add('hidden');
+      document.getElementById('study-answer-extra').innerHTML = '';
       document.getElementById('study-actions-reveal').style.display = 'block';
       document.getElementById('study-actions-grade').style.display = 'none';
 
@@ -1333,6 +1335,17 @@ const item = task.it;
       document.getElementById('study-answer').classList.remove('hidden');
       document.getElementById('study-actions-reveal').style.display = 'none';
       document.getElementById('study-actions-grade').style.display = 'block';
+      // When Chinese was the prompt, show phonetic + audio under the revealed English answer
+      const task = this.studyQueue[this.studyIndex];
+      const item = task && task.it;
+      const extra = document.getElementById('study-answer-extra');
+      const english = task && item && (item.word || item.english || '');
+      if (task && task.dir === 'zh2en' && english) {
+        const ph = item.phonetic ? `<div style="font-size:14px;color:var(--primary);font-style:italic;margin-top:6px;">${this.escape(item.phonetic)}</div>` : '';
+        extra.innerHTML = `${ph}<div style="margin-top:6px;"><button class="audio-btn" onclick="app.speak('${this.escapeAttr(english)}')">🔊 发音</button></div>`;
+      } else {
+        extra.innerHTML = '';
+      }
     }
 
     grade(quality) {
