@@ -948,7 +948,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       if (!raw) return this.toast('请输入内容');
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
       const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
-      const existing = new Set(this.words.map(it => norm(it.word)));
+      const existing = new Set(this.words.map(it => norm(it.word) + '||' + norm(it.meaning)));
       const batchSeen = new Set();
       let added = 0, dup = 0;
       lines.forEach(line => {
@@ -958,7 +958,8 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         else if (parts.length === 2) { word = parts[0]; meaning = parts[1]; }
         else if (parts[0]) { word = parts[0]; meaning = ''; }
         if (word) {
-          const key = norm(word);
+          // Duplicate only when BOTH word and meaning match (same word with different meaning is a new entry)
+          const key = norm(word) + '||' + norm(meaning);
           if (existing.has(key) || batchSeen.has(key)) { dup++; return; }
           existing.add(key); batchSeen.add(key);
           this.words.push({
