@@ -78,10 +78,6 @@
       background: transparent; color: transparent;
       user-select: none; cursor: pointer;
     }
-    .study-answer.hidden::after {
-      content: "点击显示答案"; color: var(--primary); font-size: 16px;
-      position: absolute;
-    }
     .study-answer { position: relative; }
     .btn {
       padding: 12px 24px; border: none; border-radius: 10px;
@@ -242,11 +238,11 @@ border-bottom: 1.5px solid var(--border);
 <div><div style="font-size:24px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
 </div>
     </div>
-    <div class="card">
-      <div class="card-title">快速操作</div>
-      <button class="btn btn-outline btn-block" onclick="app.goPage('sentences')">管理句子素材</button>
-      <button class="btn btn-outline btn-block" onclick="app.goPage('words')">管理单词素材</button>
-      <button class="btn btn-outline btn-block" onclick="app.goPage('grammar')">管理语法素材</button>
+    <div class="card" id="resume-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <span id="resume-text" style="font-size:14px;color:var(--text);"></span>
+        <button class="btn btn-primary" style="padding:8px 18px;" onclick="app.resumeSession()">▶ 继续学习</button>
+      </div>
     </div>
   </div>
 
@@ -498,7 +494,8 @@ words: 'em_words',
 grammar: 'em_grammar',
     settings: 'em_settings',
     records: 'em_records',
-    daily: 'em_daily'
+    daily: 'em_daily',
+    session: 'em_session'
   };
 
 const DEFAULT_SETTINGS = {
@@ -860,6 +857,19 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       document.getElementById('today-grammar').textContent = this.daily.grammarDone || 0;
       document.getElementById('today-total').textContent = total;
       this.updateDirTabs();
+      // Show resume entry when an unfinished study session exists
+      const rc = document.getElementById('resume-card');
+      if (rc) {
+        let sess = null;
+        try { sess = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
+        if (sess && sess.tasks && sess.index < sess.tasks.length) {
+          const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
+          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，还剩 ' + (sess.tasks.length - sess.index) + ' / ' + sess.tasks.length + ' 条';
+          rc.style.display = 'block';
+        } else {
+          rc.style.display = 'none';
+        }
+      }
     }
 
     // Import
@@ -1282,6 +1292,7 @@ this.studyIndex = 0;
 const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
 this.daily[pickedKey] = (this.daily[pickedKey] || 0) + chosenTasks.length;
 save(STORAGE_KEYS.daily, this.daily);
+this.saveStudySession();
 this.closeModal();
 this.goPage('study');
 this.renderStudyCard();
@@ -1443,30 +1454,34 @@ const item = task.it;
       else save(STORAGE_KEYS.grammar, this.grammar);
       this.syncToGist();
 
-      this.studyIndex++;
-      if (this.studyIndex >= this.studyQueue.length) {
-        this.toast('本次学习完成！');
-        this.goPage('dashboard');
-      } else {
-        this.renderStudyCard();
-      }
-    }
+this.studyIndex++;
+if (this.studyIndex >= this.studyQueue.length) {
+this.clearStudySession();
+this.toast('本次学习完成！');
+this.goPage('dashboard');
+} else {
+this.saveStudySession();
+this.renderStudyCard();
+}
+}
 
-    goPrev() {
-      if (this.studyIndex > 0) {
-        this.studyIndex--;
-        this.renderStudyCard();
-      }
-    }
+goPrev() {
+if (this.studyIndex > 0) {
+this.studyIndex--;
+this.saveStudySession();
+this.renderStudyCard();
+}
+}
 
-    goNext() {
-      if (this.studyIndex < this.studyQueue.length - 1) {
-        this.studyIndex++;
-        this.renderStudyCard();
-      } else {
-        this.toast('已经是最后一句了');
-      }
-    }
+goNext() {
+if (this.studyIndex < this.studyQueue.length - 1) {
+this.studyIndex++;
+this.saveStudySession();
+this.renderStudyCard();
+} else {
+this.toast('已经是最后一句了');
+}
+}
 
     updateNavButtons() {
       const prevBtn = document.getElementById('btn-prev');
@@ -1478,7 +1493,39 @@ const item = task.it;
     }
 
     endStudy() {
+      this.clearStudySession();
       this.goPage('dashboard');
+    }
+
+    // Persist the in-progress study session so it survives page reloads/exits
+    saveStudySession() {
+      if (!this.studyQueue || !this.studyQueue.length || this.studyIndex >= this.studyQueue.length) return;
+      save(STORAGE_KEYS.session, {
+        type: this.studyType,
+        index: this.studyIndex,
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null }))
+      });
+    }
+
+    clearStudySession() {
+      try { localStorage.removeItem(STORAGE_KEYS.session); } catch (e) {}
+    }
+
+    resumeSession() {
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
+      if (!s || !s.tasks || !s.tasks.length || s.index >= s.tasks.length) { this.clearStudySession(); return; }
+      const all = [...this.sentences, ...this.words, ...this.grammar];
+      const queue = s.tasks.map(t => {
+        const it = all.find(x => x.id === t.id);
+        return it ? { it: it, dir: t.dir } : null;
+      }).filter(Boolean);
+      if (!queue.length) { this.clearStudySession(); return; }
+      this.studyType = s.type;
+      this.studyQueue = queue;
+      this.studyIndex = Math.min(s.index, queue.length - 1);
+      this.goPage('study');
+      this.renderStudyCard();
     }
 
     // Direction filter: 'all' | 'en2zh' | 'zh2en' (grammar tasks have no direction and are always kept)
