@@ -1493,8 +1493,10 @@ this.toast('已经是最后一句了');
     }
 
     endStudy() {
-      this.clearStudySession();
+      // Keep the unfinished session so the user can resume from the dashboard;
+      // session is cleared only when the queue is fully graded or replaced by a new one
       this.goPage('dashboard');
+      this.refreshDashboard();
     }
 
     // Persist the in-progress study session so it survives page reloads/exits
