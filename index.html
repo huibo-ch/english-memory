@@ -1459,13 +1459,14 @@ const item = task.it;
       if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
       else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
       else save(STORAGE_KEYS.grammar, this.grammar);
-      // Same-day requeue (Momo-style): fuzzy/forgot items rejoin the queue tail today,
+      // Same-day requeue (Momo-style): every item rejoins the queue tail today
+      // regardless of the grade (even "记住"), up to 5 re-appearances per item,
       // per-type cap: 15/day each for sentences, words, grammar
-      if (quality <= 2) {
+      if ((task.rq || 0) < 5) {
         const rqKey = isSentence ? 'senRequeueUsed' : (this.studyType === 'word' ? 'wordRequeueUsed' : 'gramRequeueUsed');
         const used = this.daily[rqKey] || 0;
         if (used < 15) {
-          this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true });
+          this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: (task.rq || 0) + 1 });
           this.daily[rqKey] = used + 1;
           save(STORAGE_KEYS.daily, this.daily);
         }
@@ -1523,7 +1524,7 @@ this.toast('已经是最后一句了');
       save(STORAGE_KEYS.session, {
         type: this.studyType,
         index: this.studyIndex,
-        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue }))
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0 }))
       });
     }
 
@@ -1538,7 +1539,7 @@ this.toast('已经是最后一句了');
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const queue = s.tasks.map(t => {
         const it = all.find(x => x.id === t.id);
-        return it ? { it: it, dir: t.dir, requeue: !!t.requeue } : null;
+        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0 } : null;
       }).filter(Boolean);
       if (!queue.length) { this.clearStudySession(); return; }
       this.studyType = s.type;
