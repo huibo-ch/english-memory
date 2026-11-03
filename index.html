@@ -629,7 +629,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
       this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
-      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, requeueUsed: 0 };
+      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, senRequeueUsed: 0, wordRequeueUsed: 0, gramRequeueUsed: 0 };
       save(STORAGE_KEYS.sentences, this.sentences);
       save(STORAGE_KEYS.words, this.words);
       save(STORAGE_KEYS.grammar, this.grammar);
@@ -646,7 +646,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 
     ensureDaily() {
 if (!this.daily.date || this.daily.date !== this.today) {
-this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, requeueUsed: 0 };
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, senRequeueUsed: 0, wordRequeueUsed: 0, gramRequeueUsed: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -1460,12 +1460,13 @@ const item = task.it;
       else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
       else save(STORAGE_KEYS.grammar, this.grammar);
       // Same-day requeue (Momo-style): fuzzy/forgot items rejoin the queue tail today,
-      // capped at 20 re-appearances per day across all items
+      // per-type cap: 15/day each for sentences, words, grammar
       if (quality <= 2) {
-        const used = this.daily.requeueUsed || 0;
-        if (used < 20) {
+        const rqKey = isSentence ? 'senRequeueUsed' : (this.studyType === 'word' ? 'wordRequeueUsed' : 'gramRequeueUsed');
+        const used = this.daily[rqKey] || 0;
+        if (used < 15) {
           this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true });
-          this.daily.requeueUsed = used + 1;
+          this.daily[rqKey] = used + 1;
           save(STORAGE_KEYS.daily, this.daily);
         }
       }
