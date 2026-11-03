@@ -442,6 +442,7 @@ revenue | 收入；营收 | ˈrevənjuː
         <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
         <span id="study-progress" style="font-size:13px;color:var(--text-light);">1 / 10</span>
       </div>
+      <div style="margin-top:4px;"><span id="study-requeue-badge" style="display:none;font-size:11px;color:#B8860B;background:#FFF7DC;border-radius:8px;padding:2px 10px;">🔁 今日重现</span></div>
       <div class="study-area">
         <div id="study-audio-wrap"></div>
         <div class="study-prompt" id="study-prompt"></div>
@@ -628,7 +629,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
       this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
-      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
+      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, requeueUsed: 0 };
       save(STORAGE_KEYS.sentences, this.sentences);
       save(STORAGE_KEYS.words, this.words);
       save(STORAGE_KEYS.grammar, this.grammar);
@@ -645,7 +646,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 
     ensureDaily() {
 if (!this.daily.date || this.daily.date !== this.today) {
-this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, requeueUsed: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -1308,6 +1309,10 @@ const item = task.it;
       const isWord = this.studyType === 'word';
       const dir = task.dir; // 'en2zh' | 'zh2en' | null (grammar)
 
+      // 🔁 今日重现 badge
+      const badge = document.getElementById('study-requeue-badge');
+      if (badge) badge.style.display = task.requeue ? 'inline-block' : 'none';
+
       const typeName = isSentence ? '句子' : isWord ? '单词' : '语法';
       const label = dir ? (typeName + ' · ' + (dir === 'en2zh' ? '英译中' : '中译英')) : '语法 · 回忆';
       document.getElementById('study-type-label').textContent = label;
@@ -1418,7 +1423,8 @@ const item = task.it;
       next.setDate(next.getDate() + interval);
       state.nextReview = fmtDate(next.getFullYear(), next.getMonth()+1, next.getDate());
 
-      // Daily tracking
+      // Daily tracking (requeue appearances do NOT count toward daily stats)
+      if (!task.requeue) {
       if (isSentence) {
         this.daily.sentenceDone++;
         if (quality === 3) this.daily.sentenceCorrect++;
@@ -1448,10 +1454,21 @@ const item = task.it;
         this.daily.zh2enDone = (this.daily.zh2enDone || 0) + 1;
         if (wasNew) this.daily.zh2enNew = (this.daily.zh2enNew || 0) + 1;
       }
+      }
       save(STORAGE_KEYS.daily, this.daily);
       if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
       else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
       else save(STORAGE_KEYS.grammar, this.grammar);
+      // Same-day requeue (Momo-style): fuzzy/forgot items rejoin the queue tail today,
+      // capped at 20 re-appearances per day across all items
+      if (quality <= 2) {
+        const used = this.daily.requeueUsed || 0;
+        if (used < 20) {
+          this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true });
+          this.daily.requeueUsed = used + 1;
+          save(STORAGE_KEYS.daily, this.daily);
+        }
+      }
       this.syncToGist();
 
 this.studyIndex++;
@@ -1505,7 +1522,7 @@ this.toast('已经是最后一句了');
       save(STORAGE_KEYS.session, {
         type: this.studyType,
         index: this.studyIndex,
-        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null }))
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue }))
       });
     }
 
@@ -1520,7 +1537,7 @@ this.toast('已经是最后一句了');
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const queue = s.tasks.map(t => {
         const it = all.find(x => x.id === t.id);
-        return it ? { it: it, dir: t.dir } : null;
+        return it ? { it: it, dir: t.dir, requeue: !!t.requeue } : null;
       }).filter(Boolean);
       if (!queue.length) { this.clearStudySession(); return; }
       this.studyType = s.type;
