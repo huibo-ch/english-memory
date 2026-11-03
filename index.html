@@ -460,6 +460,9 @@ revenue | 收入；营收 | ˈrevənjuː
             <button class="btn btn-success" onclick="app.grade(3)">认识</button>
           </div>
         </div>
+        <div style="text-align:center;margin-top:14px;">
+          <button class="btn btn-outline" style="font-size:13px;padding:6px 14px;" onclick="app.editCurrentCard()">✏️ 修改本条</button>
+        </div>
       </div>
     </div>
     <div style="text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
@@ -1353,6 +1356,66 @@ const item = task.it;
 
       this.updateDirTabs();
       this.updateNavButtons();
+    }
+
+    editCurrentCard() {
+      const task = this.studyQueue && this.studyQueue[this.studyIndex];
+      if (!task) return;
+      const item = task.it;
+      const wasRevealed = !document.getElementById('study-answer').classList.contains('hidden');
+      const ta = id => `width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;`;
+      const finish = () => {
+        this.closeModal();
+        this.renderStudyCard();
+        if (wasRevealed) this.showAnswer();
+        this.syncToGist();
+        this.toast('已保存并同步云端');
+      };
+      if (this.studyType === 'word') {
+        this.openModal('修改本条单词', `
+          <div style="margin-bottom:10px;">单词</div>
+          <textarea id="cur-en" style="${ta()}">${this.escape(item.word || '')}</textarea>
+          <div style="margin:12px 0 10px;">释义</div>
+          <textarea id="cur-zh" style="${ta()}">${this.escape(item.meaning || '')}</textarea>
+          <div style="margin:12px 0 10px;">音标（可选）</div>
+          <textarea id="cur-ph" style="${ta()}">${this.escape(item.phonetic || '')}</textarea>
+        `, () => {
+          const en = document.getElementById('cur-en').value.trim();
+          if (!en) return this.toast('单词不能为空');
+          item.word = en;
+          item.meaning = document.getElementById('cur-zh').value.trim();
+          item.phonetic = document.getElementById('cur-ph').value.trim();
+          save(STORAGE_KEYS.words, this.words);
+          finish();
+        });
+      } else if (this.studyType === 'sentence') {
+        this.openModal('修改本条句子', `
+          <div style="margin-bottom:10px;">英文</div>
+          <textarea id="cur-en" style="${ta()}">${this.escape(item.english || '')}</textarea>
+          <div style="margin:12px 0 10px;">中文</div>
+          <textarea id="cur-zh" style="${ta()}">${this.escape(item.chinese || '')}</textarea>
+          <div style="margin:12px 0 10px;">音标（可选）</div>
+          <textarea id="cur-ph" style="${ta()}">${this.escape(item.phonetic || '')}</textarea>
+        `, () => {
+          const en = document.getElementById('cur-en').value.trim();
+          if (!en) return this.toast('英文不能为空');
+          item.english = en;
+          item.chinese = document.getElementById('cur-zh').value.trim();
+          item.phonetic = document.getElementById('cur-ph').value.trim();
+          save(STORAGE_KEYS.sentences, this.sentences);
+          finish();
+        });
+      } else {
+        this.openModal('修改本条语法', `
+          <textarea id="cur-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(item.rule || '')}</textarea>
+        `, () => {
+          const rule = document.getElementById('cur-rule').value.trim();
+          if (!rule) return this.toast('内容不能为空');
+          item.rule = rule;
+          save(STORAGE_KEYS.grammar, this.grammar);
+          finish();
+        });
+      }
     }
 
     escapeAttr(s) {
