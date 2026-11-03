@@ -629,7 +629,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
       this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
       this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
-      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, senRequeueUsed: 0, wordRequeueUsed: 0, gramRequeueUsed: 0 };
+      this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
       save(STORAGE_KEYS.sentences, this.sentences);
       save(STORAGE_KEYS.words, this.words);
       save(STORAGE_KEYS.grammar, this.grammar);
@@ -646,7 +646,7 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
 
     ensureDaily() {
 if (!this.daily.date || this.daily.date !== this.today) {
-this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, senRequeueUsed: 0, wordRequeueUsed: 0, gramRequeueUsed: 0 };
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
         save(STORAGE_KEYS.daily, this.daily);
       }
     }
@@ -1459,17 +1459,15 @@ const item = task.it;
       if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
       else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
       else save(STORAGE_KEYS.grammar, this.grammar);
-      // Same-day requeue (Momo-style): every item rejoins the queue tail today
-      // regardless of the grade (even "记住"), up to 5 re-appearances per item,
-      // per-type cap: 15/day each for sentences, words, grammar
-      if ((task.rq || 0) < 5) {
-        const rqKey = isSentence ? 'senRequeueUsed' : (this.studyType === 'word' ? 'wordRequeueUsed' : 'gramRequeueUsed');
-        const used = this.daily[rqKey] || 0;
-        if (used < 15) {
-          this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: (task.rq || 0) + 1 });
-          this.daily[rqKey] = used + 1;
-          save(STORAGE_KEYS.daily, this.daily);
-        }
+      // Same-day requeue (Momo-style), per-item counters, no per-type quota:
+      // - 模糊/忘记: always rejoins the queue tail, up to 15 re-appearances per item per day
+      // - 记住: still rejoins ("consolidation"), but only 5 more re-appearances after the
+      //   first "记住"; grading fuzzy/forgot resets consolidation (back to full requeue mode)
+      const rq = task.rq || 0;
+      const hit = quality === 3 ? (task.hit || 0) + 1 : 0;
+      const shouldPush = quality <= 2 ? (rq < 15) : (hit <= 5);
+      if (shouldPush) {
+        this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: rq + 1, hit: hit });
       }
       this.syncToGist();
 
@@ -1524,7 +1522,7 @@ this.toast('已经是最后一句了');
       save(STORAGE_KEYS.session, {
         type: this.studyType,
         index: this.studyIndex,
-        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0 }))
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0 }))
       });
     }
 
@@ -1539,7 +1537,7 @@ this.toast('已经是最后一句了');
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const queue = s.tasks.map(t => {
         const it = all.find(x => x.id === t.id);
-        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0 } : null;
+        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0 } : null;
       }).filter(Boolean);
       if (!queue.length) { this.clearStudySession(); return; }
       this.studyType = s.type;
