@@ -249,9 +249,9 @@ border-bottom: 1.5px solid var(--border);
   <div id="page-sentences" style="display:none;">
     <div class="card">
       <div class="card-title">批量添加句子</div>
-      <div class="upload-hint">每行一条，格式：英文句子 | 中文释义 | 音标（音标可选，用 | 分隔）</div>
-      <textarea class="upload-box" id="sentence-input" placeholder="The quick brown fox jumps over the lazy dog. | 那只敏捷的棕色狐狸跳过了那只懒狗。 | ðə kwɪk braʊn fɒks dʒʌmps ˈəʊvə ðə ˈleɪzi dɒɡ
-Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
+<div class="upload-hint">每行一条，格式：英文句子 | 音标 | 中文释义（音标可选，用 | 分隔）</div>
+<textarea class="upload-box" id="sentence-input" placeholder="The quick brown fox jumps over the lazy dog. | ðə kwɪk braʊn fɒks dʒʌmps ˈəʊvə ðə ˈleɪzi dɒɡ | 那只敏捷的棕色狐狸跳过了那只懒狗。
+Practice makes perfect. | ˈpræktɪs meɪks ˈpɜːfɪkt | 熟能生巧。
 ..."></textarea>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.importSentences()">导入</button>
@@ -272,10 +272,10 @@ Practice makes perfect. | 熟能生巧。 | ˈpræktɪs meɪks ˈpɜːfɪkt
   <div id="page-words" style="display:none;">
     <div class="card">
       <div class="card-title">批量添加单词</div>
-      <div class="upload-hint">每行一条，格式：单词 | 释义 | 音标（音标可选，用 | 分隔）</div>
-      <textarea class="upload-box" id="word-input" placeholder="invoice | 发票 | ˈɪnvɔɪs
-expense | 费用；开销 | ɪkˈspens
-revenue | 收入；营收 | ˈrevənjuː
+<div class="upload-hint">每行一条，格式：单词 | 音标 | 释义（音标可选，用 | 分隔）</div>
+<textarea class="upload-box" id="word-input" placeholder="invoice | ˈɪnvɔɪs | 发票
+expense | ɪkˈspens | 费用；开销
+revenue | ˈrevənjuː | 收入；营收
 ..."></textarea>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.importWords()">导入</button>
@@ -869,12 +869,26 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         try { sess = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
         if (sess && sess.tasks && sess.index < sess.tasks.length) {
           const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
-          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，还剩 ' + (sess.tasks.length - sess.index) + ' / ' + sess.tasks.length + ' 条';
+          const origTotal = sess.tasks.filter(t => !t.requeue).length;
+          const done = sess.done != null ? sess.done : Math.min(sess.index || 0, origTotal);
+          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，已完成 ' + done + ' / ' + origTotal + ' 条';
           rc.style.display = 'block';
         } else {
           rc.style.display = 'none';
         }
       }
+    }
+
+    // 解析一行「内容 | 音标 | 中文」（兼容旧顺序「内容 | 中文 | 音标」）
+    splitEntry(line) {
+      const parts = line.split('|').map(p => p.trim());
+      const cjk = s => /[\u4e00-\u9fa5]/.test(s);
+      const en = parts[0] || '';
+      let mid = parts[1] || '', last = parts[2] || '';
+      let zh = mid, ph = last;
+      if (last && cjk(last) && !cjk(mid)) { zh = last; ph = mid; }      // 旧格式：内容 | 中文 | 音标
+      else if (parts.length === 2 && mid && !cjk(mid)) { zh = ''; ph = mid; } // 两段且第二段不是中文 → 音标
+      return { en: en, zh: zh, ph: ph };
     }
 
     // Import
@@ -889,20 +903,14 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       let i = 0;
       while (i < lines.length) {
         const line = lines[i];
-        const parts = line.split('|').map(p => p.trim());
         let en = '', zh = '', ph = '';
-        if (parts.length >= 3) {
-          en = parts[0]; zh = parts[1]; ph = parts[2];
-          i++;
-        } else if (parts.length === 2) {
-          en = parts[0]; zh = parts[1];
-          i++;
-        } else if (i + 1 < lines.length) {
+        if (!line.includes('|') && i + 1 < lines.length) {
           en = line;
           zh = lines[i + 1];
           i += 2;
         } else {
-          en = line; zh = '';
+          const parsed = this.splitEntry(line);
+          en = parsed.en; zh = parsed.zh; ph = parsed.ph;
           i++;
         }
         if (en) {
@@ -967,11 +975,8 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const batchSeen = new Set();
       let added = 0, dup = 0;
       lines.forEach(line => {
-        const parts = line.split('|').map(p => p.trim());
-        let word = '', meaning = '', ph = '';
-        if (parts.length >= 3) { word = parts[0]; meaning = parts[1]; ph = parts[2]; }
-        else if (parts.length === 2) { word = parts[0]; meaning = parts[1]; }
-        else if (parts[0]) { word = parts[0]; meaning = ''; }
+        const parsed = this.splitEntry(line);
+        const word = parsed.en, meaning = parsed.zh, ph = parsed.ph;
         if (word) {
           // Duplicate only when BOTH word and meaning match (same word with different meaning is a new entry)
           const key = norm(word) + '||' + norm(meaning);
@@ -1368,65 +1373,60 @@ const item = task.it;
       this.updateNavButtons();
     }
 
-    editCurrentCard() {
-      const task = this.studyQueue && this.studyQueue[this.studyIndex];
-      if (!task) return;
-      const item = task.it;
-      const wasRevealed = !document.getElementById('study-answer').classList.contains('hidden');
-      const ta = id => `width:100%;min-height:40px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;`;
-      const finish = () => {
-        this.closeModal();
-        this.renderStudyCard();
-        if (wasRevealed) this.showAnswer();
-        this.syncToGist();
-        this.toast('已保存并同步云端');
-      };
-      if (this.studyType === 'word') {
-        this.openModal('修改本条单词', `
-          <div style="margin-bottom:10px;">单词</div>
-          <textarea id="cur-en" style="${ta()}">${this.escape(item.word || '')}</textarea>
-          <div style="margin:12px 0 10px;">释义</div>
-          <textarea id="cur-zh" style="${ta()}">${this.escape(item.meaning || '')}</textarea>
-          <div style="margin:12px 0 10px;">音标（可选）</div>
-          <textarea id="cur-ph" style="${ta()}">${this.escape(item.phonetic || '')}</textarea>
-        `, () => {
-          const en = document.getElementById('cur-en').value.trim();
-          if (!en) return this.toast('单词不能为空');
-          item.word = en;
-          item.meaning = document.getElementById('cur-zh').value.trim();
-          item.phonetic = document.getElementById('cur-ph').value.trim();
-          save(STORAGE_KEYS.words, this.words);
-          finish();
-        });
-      } else if (this.studyType === 'sentence') {
-        this.openModal('修改本条句子', `
-          <div style="margin-bottom:10px;">英文</div>
-          <textarea id="cur-en" style="${ta()}">${this.escape(item.english || '')}</textarea>
-          <div style="margin:12px 0 10px;">中文</div>
-          <textarea id="cur-zh" style="${ta()}">${this.escape(item.chinese || '')}</textarea>
-          <div style="margin:12px 0 10px;">音标（可选）</div>
-          <textarea id="cur-ph" style="${ta()}">${this.escape(item.phonetic || '')}</textarea>
-        `, () => {
-          const en = document.getElementById('cur-en').value.trim();
-          if (!en) return this.toast('英文不能为空');
-          item.english = en;
-          item.chinese = document.getElementById('cur-zh').value.trim();
-          item.phonetic = document.getElementById('cur-ph').value.trim();
-          save(STORAGE_KEYS.sentences, this.sentences);
-          finish();
-        });
-      } else {
-        this.openModal('修改本条语法', `
-          <textarea id="cur-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(item.rule || '')}</textarea>
-        `, () => {
-          const rule = document.getElementById('cur-rule').value.trim();
-          if (!rule) return this.toast('内容不能为空');
-          item.rule = rule;
-          save(STORAGE_KEYS.grammar, this.grammar);
-          finish();
-        });
-      }
-    }
+editCurrentCard() {
+const task = this.studyQueue && this.studyQueue[this.studyIndex];
+if (!task) return;
+const item = task.it;
+const wasRevealed = !document.getElementById('study-answer').classList.contains('hidden');
+const finish = () => {
+this.closeModal();
+this.renderStudyCard();
+if (wasRevealed) this.showAnswer();
+this.syncToGist();
+this.toast('已保存并同步云端');
+};
+if (this.studyType === 'word' || this.studyType === 'sentence') {
+const isSentence = this.studyType === 'sentence';
+const title = isSentence ? '修改本条句子' : '修改本条单词';
+const hint = isSentence
+? '格式：英文 | 音标 | 中文（音标可省略）'
+: '格式：单词 | 音标 | 中文（音标可省略）';
+const prefill = [item.word || item.english || '', item.phonetic || '', (isSentence ? item.chinese : item.meaning) || ''].join(' | ');
+this.openModal(title, `
+<div class="upload-hint" style="margin-bottom:8px;">${hint}</div>
+<textarea id="cur-edit" style="width:100%;min-height:100px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(prefill)}</textarea>
+`, () => {
+const raw = document.getElementById('cur-edit').value.trim();
+const parsed = this.splitEntry(raw);
+const en = parsed.en;
+if (!en) return this.toast((isSentence ? '英文' : '单词') + '不能为空');
+const zh = parsed.zh;
+const ph = parsed.ph;
+if (isSentence) {
+item.english = en;
+item.chinese = zh;
+item.phonetic = ph;
+save(STORAGE_KEYS.sentences, this.sentences);
+} else {
+item.word = en;
+item.meaning = zh;
+item.phonetic = ph;
+save(STORAGE_KEYS.words, this.words);
+}
+finish();
+});
+} else {
+this.openModal('修改本条语法', `
+<textarea id="cur-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(item.rule || '')}</textarea>
+`, () => {
+const rule = document.getElementById('cur-rule').value.trim();
+if (!rule) return this.toast('内容不能为空');
+item.rule = rule;
+save(STORAGE_KEYS.grammar, this.grammar);
+finish();
+});
+}
+}
 
     escapeAttr(s) {
       return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
