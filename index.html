@@ -439,8 +439,11 @@ revenue | ˈrevənjuː | 收入；营收
   <div id="page-study" style="display:none;">
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
-        <span id="study-progress" style="font-size:13px;color:var(--text-light);">1 / 10</span>
+<span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
+<div style="text-align:right;line-height:1.35;">
+<div id="study-progress" style="font-size:13px;color:var(--text-light);">已过 0 / 0</div>
+<div id="study-remaining" style="font-size:11px;color:var(--text-light);">还剩 0 条</div>
+</div>
       </div>
       <div style="margin-top:4px;"><span id="study-requeue-badge" style="display:none;font-size:11px;color:#B8860B;background:#FFF7DC;border-radius:8px;padding:2px 10px;">🔁 今日重现</span></div>
       <div class="study-area">
@@ -871,7 +874,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
           const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
           const origTotal = sess.tasks.filter(t => !t.requeue).length;
           const done = sess.done != null ? sess.done : Math.min(sess.index || 0, origTotal);
-          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，已完成 ' + done + ' / ' + origTotal + ' 条';
+          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，已过 ' + done + ' / ' + origTotal + ' · 还剩 ' + (sess.tasks.length - sess.index) + ' 条';
           rc.style.display = 'block';
         } else {
           rc.style.display = 'none';
@@ -1314,7 +1317,10 @@ renderStudyCard() {
 // Switching cards stops any ongoing auto-pronunciation
 this.stopSpeak();
 const total = this.studyQueue.length;
-document.getElementById('study-progress').textContent = '已完成 ' + (this.studyDone || 0) + ' / ' + (this.studyTotal || total);
+document.getElementById('study-progress').textContent = '已过 ' + (this.studyDone || 0) + ' / ' + (this.studyTotal || total);
+const leftCount = Math.max(0, total - this.studyIndex);
+const remEl = document.getElementById('study-remaining');
+if (remEl) remEl.textContent = leftCount > 0 ? ('还剩 ' + leftCount + ' 条') : '今日完成 🎉';
 const task = this.studyQueue[this.studyIndex];
 if (!task) return;
 const item = task.it;
@@ -1558,7 +1564,7 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
 this.studyIndex++;
 if (this.studyIndex >= this.studyQueue.length) {
 this.clearStudySession();
-this.toast('本次学习完成！');
+this.toast('今日任务完成 🎉 全部背完，辛苦啦');
 this.goPage('dashboard');
 } else {
 this.saveStudySession();
