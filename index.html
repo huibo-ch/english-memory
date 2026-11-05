@@ -401,6 +401,12 @@ revenue | ˈrevənjuː | 收入；营收
       </div>
     </div>
     <div class="card">
+      <div class="card-title">数据维护</div>
+      <div class="upload-hint" style="margin-bottom:12px;">历史上多次导入可能留下「同一英文 + 同一释义」的重复条目。每条重复条目都独立计次数，会让同一个单词一天出现两三倍，看起来像「背了不止 5 遍」。清理后每组只保留复习进度最全的一条。</div>
+      <button class="btn btn-secondary" onclick="app.dedupeWords()">🧹 清理重复词条</button>
+      <div id="dedupe-result" class="upload-hint" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
       <div class="card-title">GitHub Gist 云同步</div>
       <div class="upload-hint" style="margin-bottom:12px;">配置后可自动同步到 GitHub Gist，实现多设备互通。Token 仅保存在浏览器本地。</div>
       <div class="setting-row">
@@ -708,6 +714,62 @@ CURRENT_TZ = this.settings.dayTimezone;
 this.toast('设置已保存');
 this.checkDateRoll();
 this.refreshDashboard();
+}
+
+// Merge word entries that have identical English + Chinese, since each duplicate
+// counts its own same-day requeue pass and makes one word appear 2-3x per day
+dedupeWords() {
+const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const groups = new Map();
+this.words.forEach(it => {
+const k = norm(it.word) + '||' + norm(it.meaning);
+if (!groups.has(k)) groups.set(k, []);
+groups.get(k).push(it);
+});
+const repScore = it => {
+const s = it.srs || {};
+return ['en2zh', 'zh2en'].reduce((a, d) => a + ((s[d] && s[d].repetitions) || 0), 0);
+};
+const dropIds = new Set();
+const samples = [];
+let groupCount = 0;
+groups.forEach(list => {
+if (list.length < 2) return;
+groupCount++;
+const sorted = list.slice().sort((a, b) => repScore(b) - repScore(a));
+const keep = sorted[0];
+if (!keep.srs) this.migrateSrs(keep);
+if (samples.length < 3) samples.push(keep.word);
+sorted.slice(1).forEach(x => {
+if (!x.srs) this.migrateSrs(x);
+['en2zh', 'zh2en'].forEach(d => {
+const ks = keep.srs[d], xs = x.srs[d];
+// keep the more advanced per-direction progress
+if (ks && xs && (xs.repetitions || 0) > (ks.repetitions || 0)) keep.srs[d] = xs;
+});
+// merge same-day counters so a partly-recalled word stays partly recalled
+if (x._rqDate && x._rqDate === keep._rqDate) {
+keep._rq = Math.max(keep._rq || 0, x._rq || 0);
+keep._hit = Math.max(keep._hit || 0, x._hit || 0);
+}
+dropIds.add(x.id);
+});
+});
+const out = document.getElementById('dedupe-result');
+if (!dropIds.size) {
+if (out) out.textContent = '没有发现重复词条 👍';
+this.toast('没有发现重复词条 👍');
+return;
+}
+this.words = this.words.filter(it => !dropIds.has(it.id));
+save(STORAGE_KEYS.words, this.words);
+// queue/session may still reference removed entries
+this.clearStudySession();
+this.refreshDashboard();
+this.syncToGist();
+const msg = '已清理 ' + dropIds.size + ' 条重复词条（' + groupCount + ' 组，如 ' + samples.join('、') + '），现共 ' + this.words.length + ' 词';
+if (out) out.textContent = msg;
+this.toast(msg);
 }
 
     getDueItems(items, type) {
