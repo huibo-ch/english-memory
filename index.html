@@ -747,11 +747,6 @@ const ks = keep.srs[d], xs = x.srs[d];
 // keep the more advanced per-direction progress
 if (ks && xs && (xs.repetitions || 0) > (ks.repetitions || 0)) keep.srs[d] = xs;
 });
-// merge same-day counters so a partly-recalled word stays partly recalled
-if (x._rqDate && x._rqDate === keep._rqDate) {
-keep._rq = Math.max(keep._rq || 0, x._rq || 0);
-keep._hit = Math.max(keep._hit || 0, x._hit || 0);
-}
 dropIds.add(x.id);
 });
 });
@@ -1608,22 +1603,23 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       }
       }
       save(STORAGE_KEYS.daily, this.daily);
-// Same-day requeue (Momo-style), counted per ITEM and shared across directions
-// so one word/sentence never appears more than 5 times a day when graded "记住"
-// (fuzzy/forgot keeps re-appearing, up to 15 re-appearances per item per day)
+// Same-day requeue (Momo-style), counted per TASK: each direction is an
+// independent task with its own budget — 5 passes when graded "认识",
+// up to 15 re-appearances when graded "模糊/忘记"
 const dayKey = this.today;
-if (item._rqDate !== dayKey) { item._rqDate = dayKey; item._rq = 0; item._hit = 0; }
-const rq = item._rq || 0;
-const hit = quality === 3 ? Math.min(5, (item._hit || 0) + 1) : 0;
+if (task._rqDate !== dayKey) { task._rqDate = dayKey; task.rq = 0; task.hit = 0; }
+const rq = task.rq || 0;
+const hit = quality === 3 ? Math.min(5, (task.hit || 0) + 1) : 0;
 const shouldPush = quality <= 2 ? (rq < 15) : (hit < 5);
 // hit is always recorded (even on the final pass) so the "already 5 times today"
 // state survives a session restart on the same day
-item._hit = hit;
+task.hit = hit;
 if (shouldPush) {
-item._rq = rq + 1;
-this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true });
+task.rq = rq + 1;
+// carry the counters onto the requeued task so it keeps counting itself
+this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: task.rq, hit: hit, _rqDate: dayKey });
 }
-// persist item progress + updated daily requeue counters
+// persist item progress
 if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
 else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
 else save(STORAGE_KEYS.grammar, this.grammar);
@@ -1681,7 +1677,7 @@ save(STORAGE_KEYS.session, {
 type: this.studyType,
 index: this.studyIndex,
 done: this.studyDone || 0,
-tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0 }))
+tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0, rqDate: t._rqDate || null }))
 });
     }
 
@@ -1696,7 +1692,7 @@ tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const queue = s.tasks.map(t => {
         const it = all.find(x => x.id === t.id);
-        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0 } : null;
+        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0, _rqDate: t.rqDate || null } : null;
       }).filter(Boolean);
       if (!queue.length) { this.clearStudySession(); return; }
 this.studyType = s.type;
