@@ -1546,20 +1546,26 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       }
       }
       save(STORAGE_KEYS.daily, this.daily);
-      if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
-      else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
-      else save(STORAGE_KEYS.grammar, this.grammar);
-      // Same-day requeue (Momo-style), per-item counters, no per-type quota:
-      // - 模糊/忘记: always rejoins the queue tail, up to 15 re-appearances per item per day
-      // - 记住: still rejoins ("consolidation"), but only 5 more re-appearances after the
-      //   first "记住"; grading fuzzy/forgot resets consolidation (back to full requeue mode)
-      const rq = task.rq || 0;
-      const hit = quality === 3 ? (task.hit || 0) + 1 : 0;
-      const shouldPush = quality <= 2 ? (rq < 15) : (hit <= 5);
-      if (shouldPush) {
-        this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: rq + 1, hit: hit });
-      }
-      this.syncToGist();
+// Same-day requeue (Momo-style), counted per ITEM and shared across directions
+// so one word/sentence never appears more than 5 times a day when graded "记住"
+// (fuzzy/forgot keeps re-appearing, up to 15 re-appearances per item per day)
+const dayKey = this.today;
+if (item._rqDate !== dayKey) { item._rqDate = dayKey; item._rq = 0; item._hit = 0; }
+const rq = item._rq || 0;
+const hit = quality === 3 ? Math.min(5, (item._hit || 0) + 1) : 0;
+const shouldPush = quality <= 2 ? (rq < 15) : (hit < 5);
+// hit is always recorded (even on the final pass) so the "already 5 times today"
+// state survives a session restart on the same day
+item._hit = hit;
+if (shouldPush) {
+item._rq = rq + 1;
+this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true });
+}
+// persist item progress + updated daily requeue counters
+if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
+else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
+else save(STORAGE_KEYS.grammar, this.grammar);
+this.scheduleSync();
 
 this.studyIndex++;
 if (this.studyIndex >= this.studyQueue.length) {
@@ -1817,14 +1823,27 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       };
     }
 
-    async syncToGist() {
-      this.saveSettings(); // ensure latest input values are saved
-      const statusEl = document.getElementById('gist-status');
-      if (!this.settings.gistToken) {
-        if (statusEl) statusEl.textContent = '请先填写 GitHub Token';
-        return;
-      }
-      if (statusEl) statusEl.textContent = '正在上传到 Gist...';
+    // Debounced background sync: many quick actions (e.g. answering cards) coalesce
+    // into one upload a few seconds later, avoiding repeated 600KB+ uploads that
+    // frequently time out on mobile networks
+    scheduleSync(delay) {
+      if (this._syncTimer) clearTimeout(this._syncTimer);
+      this._syncTimer = setTimeout(() => {
+        this._syncTimer = null;
+        this.syncToGist(true);
+      }, delay == null ? 8000 : delay);
+    }
+
+    async syncToGist(silent) {
+this.saveSettings(); // ensure latest input values are saved
+const statusEl = document.getElementById('gist-status');
+if (!this.settings.gistToken) {
+if (!silent && statusEl) statusEl.textContent = '请先填写 GitHub Token';
+return;
+}
+if (this._syncing) { this._syncPending = true; return; } // never run two uploads at once
+this._syncing = true;
+if (statusEl) statusEl.textContent = silent ? '后台同步中...' : '正在上传到 Gist...';
 
       // Split into multiple files: Gist API has a ~1MB per-file limit; a single
       // file holding all data gets silently truncated (real incident: words[1534] cut off)
@@ -1843,10 +1862,11 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       // Gist limit is ~1MB per file measured in UTF-8 bytes (Chinese chars = 3 bytes each)
       const enc = new TextEncoder();
       const tooBig = Object.entries(payload.files).find(([, f]) => enc.encode(f.content).length > 950000);
-      if (tooBig) {
-        if (statusEl) statusEl.textContent = '上传中止：' + tooBig[0] + ' 超过 Gist 单文件限制，请联系开发者拆分';
-        return;
-      }
+if (tooBig) {
+this._syncing = false;
+if (statusEl) statusEl.textContent = '上传中止：' + tooBig[0] + ' 超过 Gist 单文件限制，请联系开发者拆分';
+return;
+}
 
       try {
         let url = 'https://api.github.com/gists';
@@ -1870,10 +1890,14 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
           fetch(url, { method: 'PATCH', headers: this._gistHeaders(), body: JSON.stringify({ files: { 'english-memory-data.json': null } }) });
         } catch (e2) { /* ignore */ }
         if (statusEl) statusEl.textContent = '上传成功！' + new Date().toLocaleTimeString();
-        this.toast('已同步到 Gist');
+        if (!silent) this.toast('已同步到 Gist');
       } catch (e) {
-        if (statusEl) statusEl.textContent = '上传失败: ' + e.message;
-        this.toast('Gist 同步失败');
+        if (statusEl) statusEl.textContent = '上传失败: ' + e.message + (silent ? '（稍后自动重试）' : '');
+        if (!silent) this.toast('Gist 同步失败');
+        if (silent) this.scheduleSync(30000); // quiet retry, no toast spam while studying
+      } finally {
+        this._syncing = false;
+        if (this._syncPending) { this._syncPending = false; this.scheduleSync(2000); }
       }
     }
 
