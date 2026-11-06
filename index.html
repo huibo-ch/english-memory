@@ -199,6 +199,21 @@ border-bottom: 1.5px solid var(--border);
   </div>
 
 <div id="page-dashboard">
+    <div class="card">
+      <div class="card-title">今日概览</div>
+<div style="display:flex;justify-content:space-around;text-align:center;">
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-en2zh">0</div><div style="font-size:12px;color:var(--text-light);">英译中已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-zh2en">0</div><div style="font-size:12px;color:var(--text-light);">中译英已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-grammar">0</div><div style="font-size:12px;color:var(--text-light);">语法已完成</div></div>
+<div><div style="font-size:24px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
+</div>
+    </div>
+    <div class="card" id="resume-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <span id="resume-text" style="font-size:14px;color:var(--text);"></span>
+        <button class="btn btn-primary" style="padding:8px 18px;" onclick="app.resumeSession()">▶ 继续学习</button>
+      </div>
+    </div>
 <div style="display:flex;justify-content:flex-start;margin-bottom:10px;">
 <span style="display:inline-flex;align-items:center;font-family:'Kaiti SC','KaiTi','STKaiti',cursive;font-size:14px;color:#6B5A1E;background:#FFF7DC;padding:8px 16px;border-radius:12px;box-shadow:0 4px 14px rgba(120,100,30,0.15);max-width:100%;">
 英译中的待背诵内容全部来源于中译英已背诵池子
@@ -230,21 +245,6 @@ border-bottom: 1.5px solid var(--border);
         <div id="dash-word-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
         <div class="sub" id="dash-word-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('word')">＋ 选择新学</button>
-      </div>
-    </div>
-    <div class="card" style="margin-top:16px;">
-      <div class="card-title">今日概览</div>
-<div style="display:flex;justify-content:space-around;text-align:center;">
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-en2zh">0</div><div style="font-size:12px;color:var(--text-light);">英译中已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-zh2en">0</div><div style="font-size:12px;color:var(--text-light);">中译英已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-grammar">0</div><div style="font-size:12px;color:var(--text-light);">语法已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
-</div>
-    </div>
-    <div class="card" id="resume-card" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <span id="resume-text" style="font-size:14px;color:var(--text);"></span>
-        <button class="btn btn-primary" style="padding:8px 18px;" onclick="app.resumeSession()">▶ 继续学习</button>
       </div>
     </div>
   </div>
