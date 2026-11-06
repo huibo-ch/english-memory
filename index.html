@@ -213,18 +213,21 @@ border-bottom: 1.5px solid var(--border);
       <div class="dash-card" onclick="app.goStudy('sentence')">
         <div class="label">句子 · 待复习</div>
         <div class="count" id="dash-sentence-review">0</div>
+        <div id="dash-sentence-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
         <div class="sub" id="dash-sentence-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('sentence')">＋ 选择新学</button>
       </div>
       <div class="dash-card" onclick="app.goStudy('grammar')">
         <div class="label">语法 · 待复习</div>
         <div class="count" id="dash-grammar-review">0</div>
+        <div id="dash-grammar-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
         <div class="sub" id="dash-grammar-new">已背诵 0 · 未背诵 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('grammar')">＋ 选择新学</button>
       </div>
       <div class="dash-card" onclick="app.goStudy('word')">
         <div class="label">单词 · 待复习</div>
         <div class="count" id="dash-word-review">0</div>
+        <div id="dash-word-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
         <div class="sub" id="dash-word-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
         <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('word')">＋ 选择新学</button>
       </div>
@@ -529,6 +532,23 @@ const DEFAULT_SETTINGS = {
 // Timezone used for all "today" calculations (selectable in settings)
 let CURRENT_TZ = 'Asia/Qatar';
 
+// Review ladder (Memo-style forgetting curve, day granularity).
+// stage 0..7 means "the next successful recall schedules this many days out".
+const REVIEW_TABLE = [1, 2, 4, 7, 15, 30, 60, 120];
+const MAX_STAGE = REVIEW_TABLE.length - 1;
+
+function reviewInterval(stage) {
+  const i = Math.max(0, Math.min(MAX_STAGE, Math.floor(stage || 0)));
+  return REVIEW_TABLE[i];
+}
+
+// Add `n` days to a YYYY-MM-DD string, returning the same format
+function addDays(baseDate, n) {
+  const d = parseDate(baseDate || nowDate());
+  d.setDate(d.getDate() + Math.max(1, Math.round(n || 1)));
+  return fmtDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
   function tzParts(tz) {
     try {
       const s = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -635,12 +655,11 @@ if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
     // Wipe all study progress (SRS states + daily stats), keep imported content and settings
     resetProgress() {
       if (!confirm('确定清空全部背诵进度吗？\n\n导入的内容会保留，但所有背诵记录（两个方向的进度、复习计划、今日统计）将全部归零。\n清空后会自动上传到云端覆盖旧数据。')) return;
-      const fresh = () => ({ repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today });
-      const freshSrs = () => ({ en2zh: fresh(), zh2en: fresh() });
+      const blank = () => ({ stage: 0, seen: false, gradedOn: null, nextReview: null });
       const wipeSrsFields = it => { delete it.repetitions; delete it.interval; delete it.ease; delete it.nextReview; };
-      this.sentences.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
-      this.words.forEach(it => { wipeSrsFields(it); it.srs = freshSrs(); });
-      this.grammar.forEach(it => { it.repetitions = 0; it.interval = 0; it.ease = 2.5; it.nextReview = this.today; });
+      this.sentences.forEach(it => { wipeSrsFields(it); it.srs = { en2zh: blank(), zh2en: blank() }; });
+      this.words.forEach(it => { wipeSrsFields(it); it.srs = { en2zh: blank(), zh2en: blank() }; });
+      this.grammar.forEach(it => { wipeSrsFields(it); Object.assign(it, blank()); });
       this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
       save(STORAGE_KEYS.sentences, this.sentences);
       save(STORAGE_KEYS.words, this.words);
@@ -728,7 +747,7 @@ groups.get(k).push(it);
 });
 const repScore = it => {
 const s = it.srs || {};
-return ['en2zh', 'zh2en'].reduce((a, d) => a + ((s[d] && s[d].repetitions) || 0), 0);
+return ['en2zh', 'zh2en'].reduce((a, d) => a + ((s[d] && s[d].stage) || 0), 0);
 };
 const dropIds = new Set();
 const samples = [];
@@ -745,7 +764,7 @@ if (!x.srs) this.migrateSrs(x);
 ['en2zh', 'zh2en'].forEach(d => {
 const ks = keep.srs[d], xs = x.srs[d];
 // keep the more advanced per-direction progress
-if (ks && xs && (xs.repetitions || 0) > (ks.repetitions || 0)) keep.srs[d] = xs;
+if (ks && xs && (xs.stage || 0) > (ks.stage || 0)) keep.srs[d] = xs;
 });
 dropIds.add(x.id);
 });
@@ -767,118 +786,184 @@ if (out) out.textContent = msg;
 this.toast(msg);
 }
 
+    // Remaining review slots left today for one scope (direction or grammar)
+    reviewRemaining(cap, dir) {
+      const d = this.daily || {};
+      const done = dir ? (d[dir + 'Done'] || 0) : (d.grammarDone || 0);
+      const isNew = dir ? (d[dir + 'New'] || 0) : (d.grammarNew || 0);
+      return Math.max(0, (cap || 0) - Math.max(0, done - isNew));
+    }
+
+    reviewCap(type, dir) {
+      if (type === 'grammar') return this.settings.reviewLimitGrammar ?? 30;
+      if (dir === 'en2zh') return this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
+      return this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
+    }
+
+    // Due queue: items whose nextReview has arrived. The daily cap only truncates the
+    // queue — nextReview is never rewritten here, so over-due items keep their date and
+    // stay first in line tomorrow instead of being silently pushed back.
     getDueItems(items, type) {
       const today = this.today;
-      const due = [];
-if (type === 'grammar') {
-items.forEach(it => {
-const studied = (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
-if (studied && (!it.nextReview || it.nextReview <= today)) {
-due.push({ it: it, dir: null });
-}
-});
-        due.sort((a, b) => {
-          const da = a.it.nextReview || '9999-99-99';
-          const db = b.it.nextReview || '9999-99-99';
-          if (da !== db) return da < db ? -1 : 1;
-          return (a.it.repetitions || 0) - (b.it.repetitions || 0);
-        });
-      } else {
-        // Sentence/word: each direction is an independent task
-        items.forEach(it => {
-          this.migrateSrs(it);
-          ['en2zh', 'zh2en'].forEach(dir => {
-            const s = it.srs[dir];
-            const studied = (s.repetitions || 0) > 0 || (s.interval || 0) > 0;
-            if (studied && (!s.nextReview || s.nextReview <= today)) {
-              due.push({ it: it, dir: dir });
-            }
-          });
-        });
-        due.sort((a, b) => {
-          const da = a.it.srs[a.dir].nextReview || '9999-99-99';
-          const db = b.it.srs[b.dir].nextReview || '9999-99-99';
-          if (da !== db) return da < db ? -1 : 1;
-          return (a.it.srs[a.dir].repetitions || 0) - (b.it.srs[b.dir].repetitions || 0);
-        });
+      const cmp = (a, b) => {
+        const da = a.nextReview || '0000-00-00';
+        const db = b.nextReview || '0000-00-00';
+        if (da !== db) return da < db ? -1 : 1;
+        return (a.stage || 0) - (b.stage || 0);
+      };
+
+      if (type === 'grammar') {
+        items.forEach(it => this.migrateGrammarState(it));
+        const cap = this.reviewRemaining(this.reviewCap('grammar'), null);
+        return items
+          .filter(it => it.seen && (!it.nextReview || it.nextReview <= today))
+          .sort(cmp)
+          .slice(0, cap)
+          .map(it => ({ it: it, dir: null }));
       }
 
-      // Apply daily review caps per direction: defer overflow to tomorrow
-      if (type === 'grammar') {
-        const cap = this.settings.reviewLimitGrammar ?? 30;
-        const alreadyReviewed = Math.max(0, (this.daily.grammarDone || 0) - (this.daily.grammarNew || 0));
-        const remaining = Math.max(0, cap - alreadyReviewed);
-        if (due.length > remaining) {
-          this.deferTasks(due.slice(remaining), type);
-          due.length = remaining;
-        }
-      } else {
-        const capEn = this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
-        const capZh = this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
-        const remEn = Math.max(0, capEn - Math.max(0, (this.daily.en2zhDone || 0) - (this.daily.en2zhNew || 0)));
-        const remZh = Math.max(0, capZh - Math.max(0, (this.daily.zh2enDone || 0) - (this.daily.zh2enNew || 0)));
-        const keepEn = new Set(due.filter(t => t.dir === 'en2zh').slice(0, remEn));
-        const keepZh = new Set(due.filter(t => t.dir === 'zh2en').slice(0, remZh));
-        const overflowTasks = due.filter(t => !keepEn.has(t) && !keepZh.has(t));
-        if (overflowTasks.length) {
-          this.deferTasks(overflowTasks, type);
-          const kept = due.filter(t => keepEn.has(t) || keepZh.has(t));
-          due.length = 0;
-          kept.forEach(t => due.push(t));
-        }
-      }
+      // Sentence/word: each direction is an independent review pool
+      const candidates = [];
+      items.forEach(it => {
+        this.migrateSrs(it);
+        ['en2zh', 'zh2en'].forEach(dir => {
+          const s = it.srs[dir];
+          if (s.seen && (!s.nextReview || s.nextReview <= today)) candidates.push({ it: it, dir: dir });
+        });
+      });
+      candidates.sort((a, b) => cmp(a.it.srs[a.dir], b.it.srs[b.dir]));
+
+      const rem = {
+        en2zh: this.reviewRemaining(this.reviewCap(type, 'en2zh'), 'en2zh'),
+        zh2en: this.reviewRemaining(this.reviewCap(type, 'zh2en'), 'zh2en')
+      };
+      const taken = { en2zh: 0, zh2en: 0 };
+      const due = [];
+      candidates.forEach(t => {
+        if (taken[t.dir] >= rem[t.dir]) return;
+        taken[t.dir]++;
+        due.push(t);
+      });
       return due;
     }
 
-    // Push tasks' next review to tomorrow and persist
-    deferTasks(tasks, type) {
-      const tp = tzParts(CURRENT_TZ);
-      const tmr = new Date(tp.y, tp.m - 1, tp.d);
-      tmr.setDate(tmr.getDate() + 1);
-      const tmrStr = fmtDate(tmr.getFullYear(), tmr.getMonth() + 1, tmr.getDate());
-      tasks.forEach(t => {
-        const s = t.dir ? t.it.srs[t.dir] : t.it;
-        if (!s.nextReview || s.nextReview < tmrStr) s.nextReview = tmrStr;
+    // Total due count ignoring today's cap (used to show the real backlog)
+    countDue(items, type) {
+      const today = this.today;
+      if (type === 'grammar') {
+        items.forEach(it => this.migrateGrammarState(it));
+        return items.filter(it => it.seen && (!it.nextReview || it.nextReview <= today)).length;
+      }
+      let n = 0;
+      items.forEach(it => {
+        this.migrateSrs(it);
+        ['en2zh', 'zh2en'].forEach(dir => {
+          const s = it.srs[dir];
+          if (s.seen && (!s.nextReview || s.nextReview <= today)) n++;
+        });
       });
-      save(type === 'sentence' ? STORAGE_KEYS.sentences : type === 'word' ? STORAGE_KEYS.words : STORAGE_KEYS.grammar, this.getItemsByType(type));
+      return n;
     }
 
 getItemsByType(type) {
 return type === 'sentence' ? this.sentences : type === 'word' ? this.words : this.grammar;
 }
 
-// Ensure legacy flat SRS fields are migrated to per-direction state
-migrateSrs(it) {
-if (!it.srs) {
-const legacy = { repetitions: it.repetitions || 0, interval: it.interval || 0, ease: it.ease || 2.5, nextReview: it.nextReview || nowDate() };
-it.srs = { en2zh: Object.assign({}, legacy), zh2en: Object.assign({}, legacy) };
+// Fresh review state. `learned` marks items that already had progress in the old
+// algorithm; they restart the ladder at stage 1 and come due today.
+freshState(learned) {
+return learned
+? { stage: 1, seen: true, gradedOn: null, nextReview: this.today }
+: { stage: 0, seen: false, gradedOn: null, nextReview: null };
 }
+
+// Normalize one direction state (legacy repetitions/interval -> stage/seen)
+normState(s, legacyLearned) {
+if (s && s.stage !== undefined) {
+if (s.seen === undefined) s.seen = true;
+if (s.gradedOn === undefined) s.gradedOn = null;
+return s;
+}
+const learned = s ? ((s.repetitions || 0) > 0 || (s.interval || 0) > 0) : !!legacyLearned;
+const out = this.freshState(learned);
+if (s) {
+delete s.repetitions; delete s.interval; delete s.ease; delete s.nextReview;
+Object.assign(s, out);
+return s;
+}
+return out;
+}
+
+// Ensure sentence/word items carry two direction states
+migrateSrs(it) {
+const legacyLearned = (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
+if (!it.srs) it.srs = {};
+it.srs.en2zh = this.normState(it.srs.en2zh, legacyLearned);
+it.srs.zh2en = this.normState(it.srs.zh2en, legacyLearned);
+delete it.repetitions; delete it.interval; delete it.ease;
 return it;
 }
 
-// An item counts as learned if ANY direction has been studied (incl. forgotten: interval>0)
+// Grammar items have no direction: state lives on the item itself
+migrateGrammarState(it) {
+if (it.stage === undefined) {
+const learned = (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
+Object.assign(it, this.freshState(learned));
+} else if (it.seen === undefined) {
+it.seen = true;
+}
+delete it.repetitions; delete it.interval; delete it.ease;
+return it;
+}
+
+// Memo-style settlement: 认识 advances at most one stage per day, while
+// 模糊 / 忘记 can always pull the stage back down (and re-unlock one advance).
+settleReview(state, quality) {
+const today = this.today;
+state.seen = true;
+if (quality === 3) {
+if (state.gradedOn !== today) {
+state.nextReview = addDays(today, reviewInterval(state.stage));
+state.stage = Math.min(MAX_STAGE, (state.stage || 0) + 1);
+state.gradedOn = today;
+}
+} else if (quality === 2) {
+state.stage = Math.max(0, (state.stage || 0) - 1);
+state.nextReview = addDays(today, reviewInterval(state.stage));
+state.gradedOn = null;
+} else {
+state.stage = 0;
+state.nextReview = addDays(today, 1);
+state.gradedOn = null;
+}
+return state;
+}
+
+// An item counts as learned once any direction has been graded at least once
 isItemLearned(it, type) {
-if (type === 'grammar') return (it.repetitions || 0) > 0 || (it.interval || 0) > 0;
+if (type === 'grammar') { this.migrateGrammarState(it); return !!it.seen; }
 this.migrateSrs(it);
 return ['en2zh', 'zh2en'].some(d => this.dirStudied(it, d));
 }
 
-// A direction counts as studied once it has SRS history (even if forgotten: repetitions reset to 0 but interval stays 1+)
+// A direction counts as studied once it has been graded (forgotten counts too)
 dirStudied(it, dir) {
 this.migrateSrs(it);
-const s = it.srs[dir];
-return (s.repetitions || 0) > 0 || (s.interval || 0) > 0;
+return !!it.srs[dir].seen;
 }
 
 // Meta line for list rendering
 taskMeta(it, type) {
 if (type === 'grammar') {
-return ((it.repetitions || 0) === 0 && (it.interval || 0) === 0) ? '<span style="color:var(--primary);font-weight:600;">未背诵</span>' : '下次复习: ' + (it.nextReview || '今天') + ' · 熟练度: ' + (it.repetitions || 0);
+this.migrateGrammarState(it);
+return it.seen
+? '下次复习: ' + (it.nextReview || '今天') + ' · 阶段: ' + (it.stage || 0) + '/' + MAX_STAGE
+: '<span style="color:var(--primary);font-weight:600;">未背诵</span>';
 }
 this.migrateSrs(it);
-const fmt = (s, name) => ((s.repetitions || 0) === 0 && (s.interval || 0) === 0)
+const fmt = (s, name) => !s.seen
 ? name + '未背'
-: name + '下次 ' + (s.nextReview || '今天') + ' · 熟' + (s.repetitions || 0);
+: name + '下次 ' + (s.nextReview || '今天') + ' · 阶' + (s.stage || 0);
 return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 ');
 }
 
@@ -886,9 +971,16 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const sDue = this.getDueItems(this.sentences, 'sentence');
       const gDue = this.getDueItems(this.grammar, 'grammar');
       const wDue = this.getDueItems(this.words, 'word');
-      document.getElementById('dash-sentence-review').textContent = sDue.length;
-      document.getElementById('dash-grammar-review').textContent = gDue.length;
-      document.getElementById('dash-word-review').textContent = wDue.length;
+      // Big number = what you can do today; the note shows the real backlog when the
+      // daily cap is the binding constraint
+      const setDueCard = (prefix, allowed, backlog) => {
+        document.getElementById('dash-' + prefix + '-review').textContent = allowed;
+        const note = document.getElementById('dash-' + prefix + '-review-note');
+        if (note) note.textContent = backlog > allowed ? ('到期 ' + backlog + ' · 今日上限 ' + allowed) : '';
+      };
+      setDueCard('sentence', sDue.length, this.countDue(this.sentences, 'sentence'));
+      setDueCard('grammar', gDue.length, this.countDue(this.grammar, 'grammar'));
+      setDueCard('word', wDue.length, this.countDue(this.words, 'word'));
 
       const setPool = (learned, total, dashEl, statsEl) => {
         const text = '已背诵 ' + learned + ' · 未背诵 ' + (total - learned);
@@ -981,7 +1073,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
             this.sentences.push({
               id: uuid(), english: en, chinese: zh, phonetic: ph,
               createdAt: this.today,
-              repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+              stage: 0, seen: false, gradedOn: null, nextReview: null
             });
             added++;
           }
@@ -1013,7 +1105,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
           this.grammar.push({
             id: uuid(), rule: text,
             createdAt: this.today,
-            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+            stage: 0, seen: false, gradedOn: null, nextReview: null
           });
           added++;
         }
@@ -1045,7 +1137,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
           this.words.push({
             id: uuid(), word: word, phonetic: ph, meaning: meaning,
             createdAt: this.today,
-            repetitions: 0, interval: 0, ease: 2.5, nextReview: this.today
+            stage: 0, seen: false, gradedOn: null, nextReview: null
           });
           added++;
         }
@@ -1241,6 +1333,9 @@ return;
 }
 this.studyQueue = queue;
 this.studyIndex = 0;
+this.studyDone = 0;
+this.studyTotal = queue.filter(t => !t.requeue).length;
+this.saveStudySession();
 this.goPage('study');
 this.renderStudyCard();
 }
@@ -1535,39 +1630,14 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       const task = this.studyQueue[this.studyIndex];
       const item = task.it;
       const isSentence = this.studyType === 'sentence';
+      if (task.dir) this.migrateSrs(item); else this.migrateGrammarState(item);
       const state = task.dir ? item.srs[task.dir] : item;
 
       // Track if this was a new task before we mutate it
-      const wasNew = (state.repetitions || 0) === 0;
+      const wasNew = !state.seen;
 
-      // SRS update
-      let { repetitions = 0, interval = 0, ease = 2.5 } = state;
-      if (quality === 1) {
-        repetitions = 0;
-        interval = 1;
-        ease = Math.max(1.3, ease - 0.2);
-      } else if (quality === 2) {
-        interval = Math.max(1, Math.round(interval * 0.5));
-        if (interval < 1) interval = 1;
-        ease = Math.max(1.3, ease - 0.05);
-      } else {
-        if (repetitions === 0) {
-          interval = 1;
-        } else if (repetitions === 1) {
-          interval = 3;
-        } else {
-          interval = Math.round(interval * ease);
-        }
-        repetitions++;
-        ease += 0.1;
-      }
-      state.repetitions = repetitions;
-      state.interval = interval;
-      state.ease = ease;
-      const tp = tzParts(CURRENT_TZ);
-      const next = new Date(tp.y, tp.m - 1, tp.d);
-      next.setDate(next.getDate() + interval);
-      state.nextReview = fmtDate(next.getFullYear(), next.getMonth()+1, next.getDate());
+      // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
+      this.settleReview(state, quality);
 
       // Daily tracking (requeue appearances do NOT count toward daily stats)
       if (!task.requeue) {
@@ -1675,6 +1745,7 @@ this.toast('已经是最后一句了');
       if (!this.studyQueue || !this.studyQueue.length || this.studyIndex >= this.studyQueue.length) return;
 save(STORAGE_KEYS.session, {
 type: this.studyType,
+date: this.today,
 index: this.studyIndex,
 done: this.studyDone || 0,
 tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0, rqDate: t._rqDate || null }))
@@ -1690,16 +1761,41 @@ tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t
       try { s = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
       if (!s || !s.tasks || !s.tasks.length || s.index >= s.tasks.length) { this.clearStudySession(); return; }
       const all = [...this.sentences, ...this.words, ...this.grammar];
-      const queue = s.tasks.map(t => {
+      const sameDay = s.date === this.today;
+      // Only the unfinished tail matters; completed tasks are already settled.
+      // Today's leftover allowance still applies when resuming, and yesterday's
+      // requeue bookkeeping must not leak into today.
+      const rest = s.tasks.slice(s.index || 0);
+      const rem = {
+        en2zh: this.reviewRemaining(this.reviewCap(s.type, 'en2zh'), 'en2zh'),
+        zh2en: this.reviewRemaining(this.reviewCap(s.type, 'zh2en'), 'zh2en'),
+        grammar: this.reviewRemaining(this.reviewCap('grammar'), null)
+      };
+      const taken = { en2zh: 0, zh2en: 0, grammar: 0 };
+      const queue = [];
+      rest.forEach(t => {
         const it = all.find(x => x.id === t.id);
-        return it ? { it: it, dir: t.dir, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0, _rqDate: t.rqDate || null } : null;
-      }).filter(Boolean);
+        if (!it) return;
+        const task = {
+          it: it, dir: t.dir || null,
+          requeue: sameDay ? !!t.requeue : false,
+          rq: sameDay ? (t.rq || 0) : 0,
+          hit: sameDay ? (t.hit || 0) : 0,
+          _rqDate: sameDay ? (t.rqDate || null) : null
+        };
+        if (!task.requeue) {
+          const key = task.dir || 'grammar';
+          if (taken[key] >= rem[key]) return;   // over today's cap: stays due for later
+          taken[key]++;
+        }
+        queue.push(task);
+      });
       if (!queue.length) { this.clearStudySession(); return; }
 this.studyType = s.type;
 this.studyQueue = queue;
-this.studyIndex = Math.min(s.index, queue.length - 1);
+this.studyIndex = 0;
 this.studyDone = s.done || 0;
-this.studyTotal = queue.filter(t => !t.requeue).length;
+this.studyTotal = (s.done || 0) + queue.filter(t => !t.requeue).length;
       this.goPage('study');
       this.renderStudyCard();
     }
