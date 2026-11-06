@@ -474,6 +474,7 @@ revenue | ˈrevənjuː | 收入；营收
         </div>
         <div style="text-align:center;margin-top:14px;">
           <button class="btn btn-outline" style="font-size:13px;padding:6px 14px;" onclick="app.editCurrentCard()">✏️ 修改本条</button>
+          <button class="btn btn-outline" style="font-size:13px;padding:6px 14px;color:var(--danger);border-color:var(--danger);margin-left:8px;" onclick="app.deleteCurrentCard()">🗑️ 删除本条</button>
         </div>
       </div>
     </div>
@@ -1583,6 +1584,44 @@ item.rule = rule;
 save(STORAGE_KEYS.grammar, this.grammar);
 finish();
 });
+}
+}
+
+// Delete the item currently shown on the study card: removes it from the library,
+// drops every queue/session entry pointing at it, then pushes the change to the Gist
+deleteCurrentCard() {
+const task = this.studyQueue && this.studyQueue[this.studyIndex];
+if (!task || !task.it) return;
+const item = task.it;
+const label = item.word || item.english || item.rule || '本条';
+if (!confirm('确定删除「' + String(label).slice(0, 30) + '」吗？删除后不可恢复，会同步到云端词库')) return;
+
+if (this.studyType === 'word') {
+this.words = this.words.filter(w => w.id !== item.id);
+save(STORAGE_KEYS.words, this.words);
+} else if (this.studyType === 'sentence') {
+this.sentences = this.sentences.filter(s => s.id !== item.id);
+save(STORAGE_KEYS.sentences, this.sentences);
+} else {
+this.grammar = this.grammar.filter(g => g.id !== item.id);
+save(STORAGE_KEYS.grammar, this.grammar);
+}
+
+// Queue copies (original + requeues) all sit at or after the current index
+this.studyQueue = this.studyQueue.filter(t => t.it !== item && (!t.it || t.it.id !== item.id));
+if (!task.requeue) this.studyTotal = Math.max(0, (this.studyTotal || 1) - 1);
+
+this.refreshDashboard();
+this.syncToGist();
+
+if (this.studyIndex >= this.studyQueue.length) {
+this.clearStudySession();
+this.toast('已删除并同步云端，本轮任务已全部完成');
+this.goPage('dashboard');
+} else {
+this.saveStudySession();
+this.renderStudyCard();
+this.toast('已删除并同步云端');
 }
 }
 
