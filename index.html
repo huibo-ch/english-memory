@@ -650,8 +650,12 @@ if (this.currentPage === 'sentences') this.renderSentenceList();
 if (this.currentPage === 'words') this.renderWordList();
 if (this.currentPage === 'grammar') this.renderGrammarList();
 if (this.currentPage === 'study' && this.studyQueue.length) {
-const queue = this.getDueItems(this.getItemsByType(this.studyType), this.studyType);
-if (!queue.length) { this.studyQueue = []; this.goPage('dashboard'); }
+// A new day starts a fresh pass budget for every task still in the queue
+this.studyQueue.forEach(t => { t.budget = 0; t.seen = 0; });
+this.studyDone = 0;
+this.studyTotal = this.studyQueue.length;
+this.saveStudySession();
+this.renderStudyCard();
 }
 }
 }
