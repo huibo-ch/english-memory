@@ -451,6 +451,7 @@ revenue | ˈrevənjuː | 收入；营收
 <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
 <div style="text-align:right;line-height:1.45;">
 <div id="study-progress" style="font-size:13px;color:var(--text);">本次任务数 0</div>
+<div id="study-words-left" style="font-size:11px;color:var(--text-light);">剩余单词数 0</div>
 <div id="study-remaining" style="font-size:11px;color:var(--text-light);">实时总任务 0</div>
 </div>
       </div>
@@ -1543,12 +1544,19 @@ this.renderStudyCard();
 renderStudyCard() {
 // Switching cards stops any ongoing auto-pronunciation
 this.stopSpeak();
-// Header: (a) how many distinct tasks are still waiting, (b) how many passes are
-// still owed today (each task owes 1 pass until its first grade, then its budget)
+// Header: (a) distinct tasks still waiting, (b) distinct items behind them,
+// (c) how many passes are still owed today (each task owes 1 pass until graded,
+// then its own budget: 5 for 认识, 15 for 模糊/忘记)
 const leftTasks = this.studyQueue.length;
+const leftItems = new Set(this.studyQueue.map(t => (t.it && t.it.id) || '')).size;
 const totalTasks = this.studyTotal || leftTasks;
 const leftPasses = Math.max(0, totalTasks - (this.studyDone || 0));
 document.getElementById('study-progress').textContent = '本次任务数 ' + leftTasks;
+const wordsEl = document.getElementById('study-words-left');
+if (wordsEl) {
+  const unit = this.studyType === 'sentence' ? '剩余句子数 ' : this.studyType === 'word' ? '剩余单词数 ' : '剩余语法数 ';
+  wordsEl.textContent = unit + leftItems;
+}
 const remEl = document.getElementById('study-remaining');
 if (remEl) remEl.textContent = '实时总任务 ' + leftPasses;
 const task = this.studyQueue[this.studyIndex];
