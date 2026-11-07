@@ -449,12 +449,15 @@ revenue | ˈrevənjuː | 收入；营收
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
 <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
-<div style="text-align:right;line-height:1.35;">
-<div id="study-progress" style="font-size:13px;color:var(--text-light);">已过 0 / 0</div>
-<div id="study-remaining" style="font-size:11px;color:var(--text-light);">还剩 0 条</div>
+<div style="text-align:right;line-height:1.45;">
+<div id="study-progress" style="font-size:13px;color:var(--text);">本次任务数 0</div>
+<div id="study-remaining" style="font-size:11px;color:var(--text-light);">实时总任务 0</div>
 </div>
       </div>
-      <div style="margin-top:4px;"><span id="study-requeue-badge" style="display:none;font-size:11px;color:#B8860B;background:#FFF7DC;border-radius:8px;padding:2px 10px;">🔁 今日重现</span></div>
+      <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span id="study-requeue-badge" style="display:none;font-size:11px;color:#B8860B;background:#FFF7DC;border-radius:8px;padding:2px 10px;">🔁 今日重现</span>
+        <span id="study-card-count" style="font-size:11px;color:var(--text-light);"></span>
+      </div>
       <div class="study-area">
         <div id="study-audio-wrap"></div>
         <div class="study-prompt" id="study-prompt"></div>
@@ -718,6 +721,14 @@ document.getElementById('setting-day-tz').value = this.settings.dayTimezone || '
     }
 
     saveSettings() {
+      const oldCaps = {
+        sentenceLimit: this.settings.sentenceLimit,
+        wordLimit: this.settings.wordLimit,
+        grammarLimit: this.settings.grammarLimit,
+        reviewLimitEn: this.settings.reviewLimitEn,
+        reviewLimitZh: this.settings.reviewLimitZh,
+        reviewLimitGrammar: this.settings.reviewLimitGrammar
+      };
       this.settings.sentenceLimit = parseInt(document.getElementById('setting-sentence-limit').value) || 20;
       this.settings.wordLimit = parseInt(document.getElementById('setting-word-limit').value) || 20;
       this.settings.grammarLimit = parseInt(document.getElementById('setting-grammar-limit').value) || 20;
@@ -731,9 +742,66 @@ this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
 this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
 save(STORAGE_KEYS.settings, this.settings);
 CURRENT_TZ = this.settings.dayTimezone;
-this.toast('设置已保存');
+const trimmed = this.trimQueueToLimits(oldCaps);
+this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : '设置已保存');
 this.checkDateRoll();
 this.refreshDashboard();
+}
+
+// A lowered daily limit takes effect immediately: randomly drop the overflow from the
+// running queue so it fits the new limit. Dropped tasks are left untouched — they stay
+// exactly as if they had never been studied today.
+trimQueueToLimits(oldCaps) {
+  if (!this.studyQueue || !this.studyQueue.length) return 0;
+  const type = this.studyType;
+  // [new cap, previous cap] — only a limit that was actually lowered trims anything
+  const capFor = (isNew, dir) => {
+    if (type === 'grammar') return isNew
+      ? [this.settings.grammarLimit ?? 20, oldCaps && oldCaps.grammarLimit]
+      : [this.settings.reviewLimitGrammar ?? 30, oldCaps && oldCaps.reviewLimitGrammar];
+    if (isNew) return type === 'sentence'
+      ? [this.settings.sentenceLimit ?? 20, oldCaps && oldCaps.sentenceLimit]
+      : [this.settings.wordLimit ?? 20, oldCaps && oldCaps.wordLimit];
+    return [this.reviewCap(type, dir), dir === 'en2zh' ? (oldCaps && oldCaps.reviewLimitEn) : (oldCaps && oldCaps.reviewLimitZh)];
+  };
+  const groups = new Map();
+  this.studyQueue.forEach(t => {
+    const k = (t.isNew ? 'new' : 'rev') + '|' + (t.dir || 'grammar');
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(t);
+  });
+  const doomed = new Set();
+  let droppedNew = 0;
+  groups.forEach((tasks, k) => {
+    const parts = k.split('|');
+    const dir = parts[1] === 'grammar' ? null : parts[1];
+    const [cap, oldCap] = capFor(parts[0] === 'new', dir);
+    if (oldCap == null || !(cap < oldCap)) return;   // not lowered → leave the queue alone
+    const graded = tasks.filter(t => (t.seen || 0) > 0).length;
+    const ungraded = tasks.filter(t => !(t.seen || 0));
+    const allowed = Math.max(0, cap - graded);
+    if (ungraded.length <= allowed) return;
+    ungraded.slice().sort(() => Math.random() - 0.5)
+      .slice(0, ungraded.length - allowed)
+      .forEach(t => { doomed.add(t); if (t.isNew) droppedNew++; });
+  });
+  if (!doomed.size) return 0;
+  if (droppedNew) {
+    const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
+    this.daily[pickedKey] = Math.max(0, (this.daily[pickedKey] || 0) - droppedNew);
+    save(STORAGE_KEYS.daily, this.daily);
+  }
+  this.studyQueue = this.studyQueue.filter(t => !doomed.has(t));
+  this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - doomed.size);
+  if (!this.studyQueue.length) {
+    this.clearStudySession();
+    if (this.currentPage === 'study') this.goPage('dashboard');
+    return doomed.size;
+  }
+  if (this.studyIndex >= this.studyQueue.length) this.studyIndex = Math.max(0, this.studyQueue.length - 1);
+  this.saveStudySession();
+  if (this.currentPage === 'study') this.renderStudyCard();
+  return doomed.size;
 }
 
 // Merge word entries that have identical English + Chinese, since each duplicate
@@ -1022,9 +1090,10 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         try { sess = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
         if (sess && sess.tasks && sess.index < sess.tasks.length) {
           const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
-          const origTotal = sess.tasks.filter(t => !t.requeue).length;
-          const done = sess.done != null ? sess.done : Math.min(sess.index || 0, origTotal);
-          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，已过 ' + done + ' / ' + origTotal + ' · 还剩 ' + (sess.tasks.length - sess.index) + ' 条';
+          const leftTasks = sess.tasks.length - sess.index;
+          const total = sess.total != null ? sess.total : sess.tasks.length;
+          const leftPasses = Math.max(0, total - (sess.done || 0));
+          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，本次任务数 ' + leftTasks + ' · 实时总任务 ' + leftPasses;
           rc.style.display = 'block';
         } else {
           rc.style.display = 'none';
@@ -1332,10 +1401,10 @@ if (!queue.length) {
 this.toast('今天没有需要复习的内容，可通过「选择新学」学习新内容');
 return;
 }
-this.studyQueue = queue;
+this.studyQueue = queue.map(t => ({ it: t.it, dir: t.dir, isNew: false, budget: 0, seen: 0 }));
 this.studyIndex = 0;
 this.studyDone = 0;
-this.studyTotal = queue.filter(t => !t.requeue).length;
+this.studyTotal = this.studyQueue.length;
 this.saveStudySession();
 this.goPage('study');
 this.renderStudyCard();
@@ -1431,15 +1500,16 @@ const chosenItems = newIds.map(id => items.find(x => x.id === id)).filter(Boolea
 const chosenTasks = [];
 chosenItems.forEach(it => {
 if (type === 'grammar') {
-chosenTasks.push({ it: it, dir: null });
+chosenTasks.push({ it: it, dir: null, isNew: true, budget: 0, seen: 0 });
 } else {
 // Selected directions follow the current filter (default: both directions)
 this.migrateSrs(it);
-if (this.dirFilter !== 'zh2en') chosenTasks.push({ it: it, dir: 'en2zh' });
-if (this.dirFilter !== 'en2zh') chosenTasks.push({ it: it, dir: 'zh2en' });
+if (this.dirFilter !== 'zh2en') chosenTasks.push({ it: it, dir: 'en2zh', isNew: true, budget: 0, seen: 0 });
+if (this.dirFilter !== 'en2zh') chosenTasks.push({ it: it, dir: 'zh2en', isNew: true, budget: 0, seen: 0 });
 }
 });
-const reviews = this.filterByDir(this.getDueItems(items, type), type);
+const reviews = this.filterByDir(this.getDueItems(items, type), type)
+.map(t => ({ it: t.it, dir: t.dir, isNew: false, budget: 0, seen: 0 }));
 const out = [];
 let ni = 0, ri = 0;
 const total = chosenTasks.length + reviews.length;
@@ -1455,7 +1525,7 @@ this.studyType = type;
 this.studyQueue = out;
 this.studyIndex = 0;
 this.studyDone = 0;
-this.studyTotal = out.filter(t => !t.requeue).length;
+this.studyTotal = out.length;
 // Count CREATED new tasks against the daily allowance immediately (even if not yet graded)
 const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
 this.daily[pickedKey] = (this.daily[pickedKey] || 0) + chosenTasks.length;
@@ -1469,11 +1539,14 @@ this.renderStudyCard();
 renderStudyCard() {
 // Switching cards stops any ongoing auto-pronunciation
 this.stopSpeak();
-const total = this.studyQueue.length;
-document.getElementById('study-progress').textContent = '已过 ' + (this.studyDone || 0) + ' / ' + (this.studyTotal || total);
-const leftCount = Math.max(0, total - this.studyIndex);
+// Header: (a) how many distinct tasks are still waiting, (b) how many passes are
+// still owed today (each task owes 1 pass until its first grade, then its budget)
+const leftTasks = this.studyQueue.length;
+const totalTasks = this.studyTotal || leftTasks;
+const leftPasses = Math.max(0, totalTasks - (this.studyDone || 0));
+document.getElementById('study-progress').textContent = '本次任务数 ' + leftTasks;
 const remEl = document.getElementById('study-remaining');
-if (remEl) remEl.textContent = leftCount > 0 ? ('还剩 ' + leftCount + ' 条') : '今日完成 🎉';
+if (remEl) remEl.textContent = '实时总任务 ' + leftPasses;
 const task = this.studyQueue[this.studyIndex];
 if (!task) return;
 const item = task.it;
@@ -1481,9 +1554,18 @@ const item = task.it;
       const isWord = this.studyType === 'word';
       const dir = task.dir; // 'en2zh' | 'zh2en' | null (grammar)
 
-      // 🔁 今日重现 badge
+      // 🔁 今日重现 badge + this card's own pass budget for today
       const badge = document.getElementById('study-requeue-badge');
-      if (badge) badge.style.display = task.requeue ? 'inline-block' : 'none';
+      if (badge) badge.style.display = (task.seen || 0) > 0 ? 'inline-block' : 'none';
+      const cardCount = document.getElementById('study-card-count');
+      if (cardCount) {
+        if (task.budget) {
+          const left = Math.max(0, task.budget - (task.seen || 0));
+          cardCount.textContent = '今天共 ' + task.budget + ' 次 · 剩 ' + left + ' 次';
+        } else {
+          cardCount.textContent = '今天第 1 次';
+        }
+      }
 
       const typeName = isSentence ? '句子' : isWord ? '单词' : '语法';
       const label = dir ? (typeName + ' · ' + (dir === 'en2zh' ? '英译中' : '中译英')) : '语法 · 回忆';
@@ -1607,9 +1689,11 @@ this.grammar = this.grammar.filter(g => g.id !== item.id);
 save(STORAGE_KEYS.grammar, this.grammar);
 }
 
-// Queue copies (original + requeues) all sit at or after the current index
-this.studyQueue = this.studyQueue.filter(t => t.it !== item && (!t.it || t.it.id !== item.id));
-if (!task.requeue) this.studyTotal = Math.max(0, (this.studyTotal || 1) - 1);
+// Drop every slot pointing at the deleted item (both directions)
+const removed = this.studyQueue.filter(t => t.it && t.it.id === item.id);
+this.studyQueue = this.studyQueue.filter(t => !t.it || t.it.id !== item.id);
+const owed = removed.reduce((a, t) => a + (t.budget ? Math.max(0, t.budget - (t.seen || 0)) : 1), 0);
+this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - owed);
 
 this.refreshDashboard();
 this.syncToGist();
@@ -1667,6 +1751,7 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
 
     grade(quality) {
       const task = this.studyQueue[this.studyIndex];
+      if (!task || !task.it) return;
       const item = task.it;
       const isSentence = this.studyType === 'sentence';
       if (task.dir) this.migrateSrs(item); else this.migrateGrammarState(item);
@@ -1674,13 +1759,21 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
 
       // Track if this was a new task before we mutate it
       const wasNew = !state.seen;
+      const firstPass = !(task.seen > 0);
 
       // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
       this.settleReview(state, quality);
 
-      // Daily tracking (requeue appearances do NOT count toward daily stats)
-      if (!task.requeue) {
-      this.studyDone = (this.studyDone || 0) + 1;
+      // The first grade of the day fixes this task's pass budget: 认识 → 5 passes,
+      // 模糊/忘记 → 15 passes. Every pass is counted, re-appearances included.
+      if (firstPass) {
+        task.budget = quality === 3 ? 5 : 15;
+        this.studyTotal = (this.studyTotal || 0) + task.budget - 1;
+      }
+      task.seen = (task.seen || 0) + 1;
+
+      // Daily stats count a task once — on its first pass of the day
+      if (firstPass) {
       if (isSentence) {
         this.daily.sentenceDone++;
         if (quality === 3) this.daily.sentenceCorrect++;
@@ -1712,37 +1805,27 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       }
       }
       save(STORAGE_KEYS.daily, this.daily);
-// Same-day requeue (Momo-style), counted per TASK: each direction is an
-// independent task with its own budget — 5 passes when graded "认识",
-// up to 15 re-appearances when graded "模糊/忘记"
-const dayKey = this.today;
-if (task._rqDate !== dayKey) { task._rqDate = dayKey; task.rq = 0; task.hit = 0; }
-const rq = task.rq || 0;
-const hit = quality === 3 ? Math.min(5, (task.hit || 0) + 1) : 0;
-const shouldPush = quality <= 2 ? (rq < 15) : (hit < 5);
-// hit is always recorded (even on the final pass) so the "already 5 times today"
-// state survives a session restart on the same day
-task.hit = hit;
-if (shouldPush) {
-task.rq = rq + 1;
-// carry the counters onto the requeued task so it keeps counting itself
-this.studyQueue.push({ it: item, dir: task.dir || null, requeue: true, rq: task.rq, hit: hit, _rqDate: dayKey });
-}
 // persist item progress
 if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
 else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
 else save(STORAGE_KEYS.grammar, this.grammar);
 this.scheduleSync();
+this.studyDone = (this.studyDone || 0) + 1;
 
-this.studyIndex++;
-if (this.studyIndex >= this.studyQueue.length) {
+// Same-day re-appearance without cloning the queue entry: the task keeps a single
+// slot and rotates to the tail until today's pass budget is used up.
+const cur = this.studyIndex;
+this.studyQueue.splice(cur, 1);
+if ((task.seen || 0) < (task.budget || 1)) this.studyQueue.push(task);
+if (!this.studyQueue.length) {
 this.clearStudySession();
 this.toast('今日任务完成 🎉 全部背完，辛苦啦');
 this.goPage('dashboard');
-} else {
+return;
+}
+if (this.studyIndex >= this.studyQueue.length) this.studyIndex = 0;
 this.saveStudySession();
 this.renderStudyCard();
-}
 }
 
 goPrev() {
@@ -1787,7 +1870,8 @@ type: this.studyType,
 date: this.today,
 index: this.studyIndex,
 done: this.studyDone || 0,
-tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t.requeue, rq: t.rq || 0, hit: t.hit || 0, rqDate: t._rqDate || null }))
+total: this.studyTotal || this.studyQueue.length,
+tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0 }))
 });
     }
 
@@ -1802,8 +1886,9 @@ tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const sameDay = s.date === this.today;
       // Only the unfinished tail matters; completed tasks are already settled.
-      // Today's leftover allowance still applies when resuming, and yesterday's
-      // requeue bookkeeping must not leak into today.
+      // Older sessions stored one entry per re-appearance — dedupe by item+direction
+      // so the queue keeps exactly one slot per task. Today's leftover allowance and
+      // hence the leftover pass count still apply when resuming.
       const rest = s.tasks.slice(s.index || 0);
       const rem = {
         en2zh: this.reviewRemaining(this.reviewCap(s.type, 'en2zh'), 'en2zh'),
@@ -1812,29 +1897,31 @@ tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, requeue: !!t
       };
       const taken = { en2zh: 0, zh2en: 0, grammar: 0 };
       const queue = [];
+      const seenKeys = new Set();
+      let dropped = 0;
       rest.forEach(t => {
         const it = all.find(x => x.id === t.id);
         if (!it) return;
-        const task = {
-          it: it, dir: t.dir || null,
-          requeue: sameDay ? !!t.requeue : false,
-          rq: sameDay ? (t.rq || 0) : 0,
-          hit: sameDay ? (t.hit || 0) : 0,
-          _rqDate: sameDay ? (t.rqDate || null) : null
-        };
-        if (!task.requeue) {
-          const key = task.dir || 'grammar';
-          if (taken[key] >= rem[key]) return;   // over today's cap: stays due for later
-          taken[key]++;
-        }
-        queue.push(task);
+        const key = t.dir || 'grammar';
+        const uniq = t.id + '|' + key;
+        if (seenKeys.has(uniq)) return;   // same task listed again: one slot only
+        seenKeys.add(uniq);
+        if (taken[key] >= rem[key]) { dropped++; return; }   // over today's cap: stays due for later
+        taken[key]++;
+        queue.push({
+          it: it, dir: t.dir || null, isNew: !!t.isNew,
+          budget: sameDay ? (t.budget || 0) : 0,
+          seen: sameDay ? (t.seen || 0) : 0
+        });
       });
       if (!queue.length) { this.clearStudySession(); return; }
 this.studyType = s.type;
 this.studyQueue = queue;
 this.studyIndex = 0;
-this.studyDone = s.done || 0;
-this.studyTotal = (s.done || 0) + queue.filter(t => !t.requeue).length;
+const done = sameDay ? (s.done || 0) : 0;
+this.studyDone = done;
+if (sameDay && s.total != null) this.studyTotal = Math.max(queue.length, s.total - dropped);
+else this.studyTotal = queue.length + done;
       this.goPage('study');
       this.renderStudyCard();
     }
