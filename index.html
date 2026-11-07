@@ -615,6 +615,7 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.currentPage = 'dashboard';
       this.studyQueue = [];
       this.studyIndex = 0;
+      this.studyTaskTotal = 0;   // 本次任务数：会话开始时的去重任务总数，不随推进变化
       this.studyType = '';
       this.dirFilter = this.settings.dirFilter === 'en2zh' ? 'en2zh' : 'zh2en';
       this.today = nowDate();
@@ -655,6 +656,7 @@ if (this.currentPage === 'study' && this.studyQueue.length) {
 this.studyQueue.forEach(t => { t.budget = 0; t.seen = 0; });
 this.studyDone = 0;
 this.studyTotal = this.studyQueue.length;
+this.studyTaskTotal = this.studyQueue.length;
 this.saveStudySession();
 this.renderStudyCard();
 }
@@ -676,6 +678,7 @@ this.renderStudyCard();
       save(STORAGE_KEYS.daily, this.daily);
       this.studyQueue = [];
       this.studyIndex = 0;
+      this.studyTaskTotal = 0;
       this.refreshDashboard();
       this.renderSentenceList();
       this.renderWordList();
@@ -798,6 +801,7 @@ trimQueueToLimits(oldCaps) {
   }
   this.studyQueue = this.studyQueue.filter(t => !doomed.has(t));
   this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - doomed.size);
+  this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - doomed.size);
   if (!this.studyQueue.length) {
     this.clearStudySession();
     if (this.currentPage === 'study') this.goPage('dashboard');
@@ -1095,10 +1099,10 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         try { sess = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
         if (sess && sess.tasks && sess.index < sess.tasks.length) {
           const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
-          const leftTasks = sess.tasks.length - sess.index;
-          const total = sess.total != null ? sess.total : sess.tasks.length;
-          const leftPasses = Math.max(0, total - (sess.done || 0));
-          document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，本次任务数 ' + leftTasks + ' · 实时总任务 ' + leftPasses;
+const taskTotal = sess.taskTotal != null ? sess.taskTotal : sess.tasks.length;
+const total = sess.total != null ? sess.total : sess.tasks.length;
+const leftPasses = Math.max(0, total - (sess.done || 0));
+document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，本次任务数 ' + taskTotal + ' · 实时总任务 ' + leftPasses;
           rc.style.display = 'block';
         } else {
           rc.style.display = 'none';
@@ -1410,6 +1414,7 @@ this.studyQueue = queue.map(t => ({ it: t.it, dir: t.dir, isNew: false, budget: 
 this.studyIndex = 0;
 this.studyDone = 0;
 this.studyTotal = this.studyQueue.length;
+this.studyTaskTotal = this.studyQueue.length;
 this.saveStudySession();
 this.goPage('study');
 this.renderStudyCard();
@@ -1531,6 +1536,7 @@ this.studyQueue = out;
 this.studyIndex = 0;
 this.studyDone = 0;
 this.studyTotal = out.length;
+this.studyTaskTotal = out.length;
 // Count CREATED new tasks against the daily allowance immediately (even if not yet graded)
 const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
 this.daily[pickedKey] = (this.daily[pickedKey] || 0) + chosenTasks.length;
@@ -1551,7 +1557,8 @@ const leftTasks = this.studyQueue.length;
 const leftItems = new Set(this.studyQueue.map(t => (t.it && t.it.id) || '')).size;
 const totalTasks = this.studyTotal || leftTasks;
 const leftPasses = Math.max(0, totalTasks - (this.studyDone || 0));
-document.getElementById('study-progress').textContent = '本次任务数 ' + leftTasks;
+// 本次任务数 = 会话开始时的任务总数（固定），剩余量看下面两行
+document.getElementById('study-progress').textContent = '本次任务数 ' + (this.studyTaskTotal || leftTasks);
 const wordsEl = document.getElementById('study-words-left');
 if (wordsEl) {
   const unit = this.studyType === 'sentence' ? '剩余句子数 ' : this.studyType === 'word' ? '剩余单词数 ' : '剩余语法数 ';
@@ -1706,6 +1713,7 @@ const removed = this.studyQueue.filter(t => t.it && t.it.id === item.id);
 this.studyQueue = this.studyQueue.filter(t => !t.it || t.it.id !== item.id);
 const owed = removed.reduce((a, t) => a + (t.budget ? Math.max(0, t.budget - (t.seen || 0)) : 1), 0);
 this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - owed);
+this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - removed.length);
 
 this.refreshDashboard();
 this.syncToGist();
@@ -1883,6 +1891,7 @@ date: this.today,
 index: this.studyIndex,
 done: this.studyDone || 0,
 total: this.studyTotal || this.studyQueue.length,
+taskTotal: this.studyTaskTotal || this.studyQueue.length,
 tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0 }))
 });
     }
@@ -1934,6 +1943,8 @@ const done = sameDay ? (s.done || 0) : 0;
 this.studyDone = done;
 if (sameDay && s.total != null) this.studyTotal = Math.max(queue.length, s.total - dropped);
 else this.studyTotal = queue.length + done;
+if (sameDay && s.taskTotal != null) this.studyTaskTotal = Math.max(queue.length, s.taskTotal - dropped);
+else this.studyTaskTotal = queue.length + done;
       this.goPage('study');
       this.renderStudyCard();
     }
@@ -1952,7 +1963,10 @@ else this.studyTotal = queue.length + done;
       if (this.currentPage !== 'study' || !this.studyQueue.length) return;
       const before = this.studyQueue.slice(0, this.studyIndex);
       const after = this.studyQueue.slice(this.studyIndex).filter(t => !t.dir || this.dirFilter === 'all' || t.dir === this.dirFilter);
+      const lenBefore = this.studyQueue.length;
       this.studyQueue = before.concat(after);
+      const trimmedByDir = lenBefore - this.studyQueue.length;
+      if (trimmedByDir) this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - trimmedByDir);
       if (this.studyIndex >= this.studyQueue.length) {
         this.toast('当前筛选下没有剩余任务');
         this.goPage('dashboard');
