@@ -199,53 +199,25 @@ border-bottom: 1.5px solid var(--border);
   </div>
 
 <div id="page-dashboard">
-    <div class="card">
-      <div class="card-title">今日概览</div>
-<div style="display:flex;justify-content:space-around;text-align:center;">
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-en2zh">0</div><div style="font-size:12px;color:var(--text-light);">英译中已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-zh2en">0</div><div style="font-size:12px;color:var(--text-light);">中译英已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--success);" id="today-grammar">0</div><div style="font-size:12px;color:var(--text-light);">语法已完成</div></div>
-<div><div style="font-size:24px;font-weight:700;color:var(--primary);" id="today-total">0</div><div style="font-size:12px;color:var(--text-light);">总任务</div></div>
-</div>
-    </div>
-    <div class="card" id="resume-card" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
-        <span id="resume-text" style="font-size:14px;color:var(--text);"></span>
-        <button class="btn btn-primary" style="padding:8px 18px;" onclick="app.resumeSession()">▶ 继续学习</button>
-      </div>
-    </div>
 <div style="display:flex;justify-content:flex-start;margin-bottom:10px;">
 <span style="display:inline-flex;align-items:center;font-family:'Kaiti SC','KaiTi','STKaiti',cursive;font-size:14px;color:#6B5A1E;background:#FFF7DC;padding:8px 16px;border-radius:12px;box-shadow:0 4px 14px rgba(120,100,30,0.15);max-width:100%;">
 英译中的待背诵内容全部来源于中译英已背诵池子
 </span>
 </div>
-<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
-<span style="font-size:12px;color:var(--text-light);">背诵方向：</span>
-<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-zh2en" onclick="app.setDirFilter('zh2en')">中译英</button>
-<button class="btn" style="padding:4px 14px;font-size:12px;" id="dash-dir-en2zh" title="英译中的待背诵内容全部来源于中译英已背诵池子" onclick="app.setDirFilter('en2zh')">英译中</button>
-</div>
-<div class="dash-grid">
-      <div class="dash-card" onclick="app.goStudy('sentence')">
-        <div class="label">句子 · 待复习</div>
-        <div class="count" id="dash-sentence-review">0</div>
-        <div id="dash-sentence-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
-        <div class="sub" id="dash-sentence-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
-        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('sentence')">＋ 选择新学</button>
-      </div>
-      <div class="dash-card" onclick="app.goStudy('grammar')">
-        <div class="label">语法 · 待复习</div>
-        <div class="count" id="dash-grammar-review">0</div>
-        <div id="dash-grammar-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
-        <div class="sub" id="dash-grammar-new">已背诵 0 · 未背诵 0</div>
-        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('grammar')">＋ 选择新学</button>
-      </div>
-      <div class="dash-card" onclick="app.goStudy('word')">
-        <div class="label">单词 · 待复习</div>
-        <div class="count" id="dash-word-review">0</div>
-        <div id="dash-word-review-note" style="font-size:11px;color:var(--text-light);margin-top:2px;"></div>
-        <div class="sub" id="dash-word-new">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</div>
-        <button class="btn btn-outline" style="margin-top:10px;padding:6px 14px;font-size:13px;" onclick="event.stopPropagation();app.openNewPicker('word')">＋ 选择新学</button>
-      </div>
+    <div class="card">
+      <div class="card-title">单词 · 四条通道</div>
+      <div id="dash-rows-word"></div>
+      <div style="font-size:12px;color:var(--text-light);margin-top:10px;" id="dash-word-pool"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">句子 · 四条通道</div>
+      <div id="dash-rows-sentence"></div>
+      <div style="font-size:12px;color:var(--text-light);margin-top:10px;" id="dash-sentence-pool"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">语法 · 两条通道</div>
+      <div id="dash-rows-grammar"></div>
+      <div style="font-size:12px;color:var(--text-light);margin-top:10px;" id="dash-grammar-pool"></div>
     </div>
   </div>
 
@@ -265,7 +237,7 @@ Practice makes perfect. | ˈpræktɪs meɪks ˈpɜːfɪkt | 熟能生巧。
     <div class="card">
       <div class="card-title">句子列表 <span class="badge" id="sentence-count">0</span></div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="app.openNewPicker('sentence')">📚 选择新学</button>
+        <button class="btn btn-primary" onclick="app.openNewPicker('sentence','zh2en')">📚 选择新学（中译英）</button>
         <span id="sentence-pool-stats" style="font-size:13px;color:var(--text-light);">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</span>
       </div>
       <div id="sentence-list"></div>
@@ -289,7 +261,7 @@ revenue | ˈrevənjuː | 收入；营收
     <div class="card">
       <div class="card-title">单词列表 <span class="badge" id="word-count">0</span></div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="btn btn-primary" onclick="app.openNewPicker('word')">📚 选择新学</button>
+        <button class="btn btn-primary" onclick="app.openNewPicker('word','zh2en')">📚 选择新学（中译英）</button>
         <span id="word-pool-stats" style="font-size:13px;color:var(--text-light);">英译中：已背 0 · 未背 0<br>中译英：已背 0 · 未背 0</span>
       </div>
       <div id="word-list"></div>
@@ -324,49 +296,83 @@ revenue | ˈrevənjuː | 收入；营收
 <div style="font-size:12px;color:var(--text-light);margin-top:8px;">所有句子/单词/语法的背诵记录归零（两个方向的进度、复习计划、今日统计），导入的内容和账号设置保留，清空后自动同步到云端</div>
 </div>
 <div class="card">
-<div class="card-title">每日上限</div>
+<div class="card-title">每日上限 · 单词</div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">每日新学句子</div>
-          <div class="setting-desc">每天最多学习几条新句子</div>
+          <div class="setting-label">新增 · 中译英</div>
+          <div class="setting-desc">中译英新学通道每天最多几个单词</div>
         </div>
-        <input type="number" id="setting-sentence-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+        <input type="number" id="setting-new-word-zh" min="1" max="200" value="20" onchange="app.saveSettings()">
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">每日新学单词</div>
-          <div class="setting-desc">每天最多学习几个新单词</div>
+          <div class="setting-label">新增 · 英译中</div>
+          <div class="setting-desc">英译中新学通道每天最多几个单词（取自中译英已背池）</div>
         </div>
-        <input type="number" id="setting-word-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+        <input type="number" id="setting-new-word-en" min="1" max="200" value="20" onchange="app.saveSettings()">
       </div>
       <div class="setting-row">
         <div>
-          <div class="setting-label">每日新学语法</div>
-          <div class="setting-desc">每天最多学习几条新语法</div>
+          <div class="setting-label">复习 · 中译英</div>
+          <div class="setting-desc">中译英复习通道每天最多几个，超出的顺延到明天</div>
         </div>
-        <input type="number" id="setting-grammar-limit" min="1" max="200" value="20" onchange="app.saveSettings()">
+        <input type="number" id="setting-rev-word-zh" min="5" max="500" value="30" onchange="app.saveSettings()">
       </div>
-<div class="setting-row">
-<div>
-<div class="setting-label">每日复习上限 · 英译中</div>
-<div class="setting-desc">句子的英译中与单词的英译中任务共用此上限，超出的自动顺延到明天</div>
-</div>
-<input type="number" id="setting-review-limit-en" min="5" max="500" value="30" onchange="app.saveSettings()">
-</div>
-<div class="setting-row">
-<div>
-<div class="setting-label">每日复习上限 · 中译英</div>
-<div class="setting-desc">句子的中译英与单词的中译英任务共用此上限，超出的自动顺延到明天</div>
-</div>
-<input type="number" id="setting-review-limit-zh" min="5" max="500" value="30" onchange="app.saveSettings()">
-</div>
-<div class="setting-row">
-<div>
-<div class="setting-label">每日复习上限 · 语法</div>
-<div class="setting-desc">语法复习每天最多条数，超出的自动顺延到明天</div>
-</div>
-<input type="number" id="setting-review-limit-grammar" min="5" max="500" value="30" onchange="app.saveSettings()">
-</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">复习 · 英译中</div>
+          <div class="setting-desc">英译中复习通道每天最多几个，超出的顺延到明天</div>
+        </div>
+        <input type="number" id="setting-rev-word-en" min="5" max="500" value="30" onchange="app.saveSettings()">
+      </div>
+    </div>
+<div class="card">
+<div class="card-title">每日上限 · 句子</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">新增 · 中译英</div>
+          <div class="setting-desc">中译英新学通道每天最多几条句子</div>
+        </div>
+        <input type="number" id="setting-new-sentence-zh" min="1" max="200" value="20" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">新增 · 英译中</div>
+          <div class="setting-desc">英译中新学通道每天最多几条句子（取自中译英已背池）</div>
+        </div>
+        <input type="number" id="setting-new-sentence-en" min="1" max="200" value="20" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">复习 · 中译英</div>
+          <div class="setting-desc">中译英复习通道每天最多几条，超出的顺延到明天</div>
+        </div>
+        <input type="number" id="setting-rev-sentence-zh" min="5" max="500" value="30" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">复习 · 英译中</div>
+          <div class="setting-desc">英译中复习通道每天最多几条，超出的顺延到明天</div>
+        </div>
+        <input type="number" id="setting-rev-sentence-en" min="5" max="500" value="30" onchange="app.saveSettings()">
+      </div>
+    </div>
+<div class="card">
+<div class="card-title">每日上限 · 语法</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">新增</div>
+          <div class="setting-desc">语法新学通道每天最多几条</div>
+        </div>
+        <input type="number" id="setting-new-grammar" min="1" max="200" value="10" onchange="app.saveSettings()">
+      </div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">复习</div>
+          <div class="setting-desc">语法复习通道每天最多几条，超出的顺延到明天</div>
+        </div>
+        <input type="number" id="setting-rev-grammar" min="5" max="500" value="20" onchange="app.saveSettings()">
+      </div>
     </div>
 <div class="card">
 <div class="card-title">日期时区</div>
@@ -450,9 +456,9 @@ revenue | ˈrevənjuː | 收入；营收
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
 <span id="study-type-label" style="font-size:13px;color:var(--text-light);">句子 · 英译中</span>
 <div style="text-align:right;line-height:1.45;">
-<div id="study-progress" style="font-size:13px;color:var(--text);">本次任务数 0</div>
-<div id="study-words-left" style="font-size:11px;color:var(--text-light);">剩余单词数 0</div>
-<div id="study-remaining" style="font-size:11px;color:var(--text-light);">实时总任务 0</div>
+<div id="study-left" style="font-size:13px;color:var(--text);">剩余 0</div>
+<div id="study-total" style="font-size:11px;color:var(--text-light);">总任务 0</div>
+<div id="study-limit" style="font-size:11px;color:var(--text-light);">上限 0</div>
 </div>
       </div>
       <div style="margin-top:4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -510,13 +516,14 @@ revenue | ˈrevənjuː | 收入；营收
   'use strict';
 
   const STORAGE_KEYS = {
-sentences: 'em_sentences',
-words: 'em_words',
-grammar: 'em_grammar',
+	sentences: 'em_sentences',
+	words: 'em_words',
+	grammar: 'em_grammar',
     settings: 'em_settings',
     records: 'em_records',
     daily: 'em_daily',
-    session: 'em_session'
+    session: 'em_session',          // 旧版单会话（仅用于升级时丢弃）
+    sessions: 'em_sessions'         // 按频道保存的未完成会话
   };
 
 const DEFAULT_SETTINGS = {
@@ -529,7 +536,6 @@ const DEFAULT_SETTINGS = {
   voiceRate: '1',
   reviewLimit: 30,
   dayTimezone: 'Asia/Qatar',
-  dirFilter: 'zh2en',
   gistId: '',
   gistToken: ''
 };
@@ -610,14 +616,21 @@ this.words = load(STORAGE_KEYS.words, []);
       this.grammar = load(STORAGE_KEYS.grammar, []);
       this.settings = Object.assign({}, DEFAULT_SETTINGS, load(STORAGE_KEYS.settings, {}));
 CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
+      this.migrateChannelSettings();
       this.records = load(STORAGE_KEYS.records, {});
       this.daily = load(STORAGE_KEYS.daily, {});
+      this.sessions = load(STORAGE_KEYS.sessions, {});
+      // Old single-session format mixed new + review in one queue; the channel model
+      // rebuilds queues from scratch, so drop it (item SRS progress is untouched).
+      try { localStorage.removeItem(STORAGE_KEYS.session); } catch (e) {}
       this.currentPage = 'dashboard';
       this.studyQueue = [];
       this.studyIndex = 0;
-      this.studyTaskTotal = 0;   // 本次任务数：会话开始时的去重任务总数，不随推进变化
+      this.studyDone = 0;
+      this.channel = null;          // 当前学习频道：type|dir|new|rev
       this.studyType = '';
-      this.dirFilter = this.settings.dirFilter === 'en2zh' ? 'en2zh' : 'zh2en';
+      this.studyDir = null;
+      this.studyIsNew = false;
       this.today = nowDate();
       this.ensureDaily();
       this.initNav();
@@ -647,19 +660,18 @@ const d = nowDate();
 if (d !== this.today) {
 this.today = d;
 this.ensureDaily();
+// 频道会话及其计数属于昨天，跨天后整体作废，今天从仪表盘重新进入
+this.sessions = {};
+save(STORAGE_KEYS.sessions, this.sessions);
+this.channel = null;
+this.studyQueue = [];
+this.studyIndex = 0;
+this.studyDone = 0;
 this.refreshDashboard();
 if (this.currentPage === 'sentences') this.renderSentenceList();
 if (this.currentPage === 'words') this.renderWordList();
 if (this.currentPage === 'grammar') this.renderGrammarList();
-if (this.currentPage === 'study' && this.studyQueue.length) {
-// A new day starts a fresh pass budget for every task still in the queue
-this.studyQueue.forEach(t => { t.budget = 0; t.seen = 0; });
-this.studyDone = 0;
-this.studyTotal = this.studyQueue.length;
-this.studyTaskTotal = this.studyQueue.length;
-this.saveStudySession();
-this.renderStudyCard();
-}
+if (this.currentPage === 'study') this.goPage('dashboard');
 }
 }
 
@@ -678,7 +690,10 @@ this.renderStudyCard();
       save(STORAGE_KEYS.daily, this.daily);
       this.studyQueue = [];
       this.studyIndex = 0;
-      this.studyTaskTotal = 0;
+      this.studyDone = 0;
+      this.channel = null;
+      this.sessions = {};
+      save(STORAGE_KEYS.sessions, this.sessions);
       this.refreshDashboard();
       this.renderSentenceList();
       this.renderWordList();
@@ -689,9 +704,76 @@ this.renderStudyCard();
 
     ensureDaily() {
 if (!this.daily.date || this.daily.date !== this.today) {
-this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0 };
+this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, ch: {} };
         save(STORAGE_KEYS.daily, this.daily);
       }
+      if (!this.daily.ch) this.daily.ch = {};
+    }
+
+    // ----------------------------------------------------------------
+    // 频道模型：type × 方向 × 阶段，四个（语法两个）频道各自独立队列、独立上限、独立计数
+    // 频道 key 形如 word|zh2en|new / word|zh2en|rev / grammar|x|rev
+    // ----------------------------------------------------------------
+    channelKey(type, dir, isNew) {
+      return type + '|' + (dir || 'x') + '|' + (isNew ? 'new' : 'rev');
+    }
+
+    channelName(type, dir, isNew) {
+      const t = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
+      const d = dir === 'en2zh' ? '英译中' : dir === 'zh2en' ? '中译英' : '';
+      return t + (d ? ' · ' + d : '') + ' · ' + (isNew ? '新增' : '复习');
+    }
+
+    // Daily cap of one channel (independent per type × direction × stage)
+    channelCap(type, dir, isNew) {
+      const s = this.settings;
+      const num = (v, d) => (v == null || isNaN(v) ? d : Number(v));
+      if (type === 'grammar') return isNew ? num(s.newGrammar, 10) : num(s.revGrammar, 20);
+      const t = type === 'sentence' ? 'Sentence' : 'Word';
+      const d = dir === 'en2zh' ? 'En' : 'Zh';
+      return isNew ? num(s['new' + t + d], 20) : num(s['rev' + t + d], 30);
+    }
+
+    // Today's counters of one channel: total = 今天进入该频道的任务数, done = 已背完条目数
+    channelStat(type, dir, isNew) {
+      this.ensureDaily();
+      const k = this.channelKey(type, dir, isNew);
+      if (!this.daily.ch[k]) this.daily.ch[k] = { total: 0, done: 0 };
+      const st = this.daily.ch[k];
+      st.total = st.total || 0;
+      st.done = st.done || 0;
+      return st;
+    }
+
+    bumpChannel(type, dir, isNew, delta) {
+      const st = this.channelStat(type, dir, isNew);
+      st.total = Math.max(0, st.total + delta);
+      st.done = Math.min(st.done, st.total);
+      save(STORAGE_KEYS.daily, this.daily);
+    }
+
+    // Old limits (one new-item cap per module, one review cap per direction) → 10 channel caps
+    migrateChannelSettings() {
+      const s = this.settings;
+      const pick = (cur, ...alts) => {
+        if (cur != null && !isNaN(cur) && cur !== '') return Number(cur);
+        for (const a of alts) if (a != null && !isNaN(a) && a !== '') return Number(a);
+        return null;
+      };
+      const wl = pick(null, s.wordLimit), sl = pick(null, s.sentenceLimit), gl = pick(null, s.grammarLimit);
+      const rl = pick(null, s.reviewLimit), re = pick(null, s.reviewLimitEn, rl), rz = pick(null, s.reviewLimitZh, rl);
+      const rg = pick(null, s.reviewLimitGrammar, rl);
+      s.newWordEn = pick(s.newWordEn, wl, 20);
+      s.newWordZh = pick(s.newWordZh, wl, 20);
+      s.newSentenceEn = pick(s.newSentenceEn, sl, 20);
+      s.newSentenceZh = pick(s.newSentenceZh, sl, 20);
+      s.newGrammar = pick(s.newGrammar, gl, 10);
+      s.revWordEn = pick(s.revWordEn, re, 30);
+      s.revWordZh = pick(s.revWordZh, rz, 30);
+      s.revSentenceEn = pick(s.revSentenceEn, re, 30);
+      s.revSentenceZh = pick(s.revSentenceZh, rz, 30);
+      s.revGrammar = pick(s.revGrammar, rg, 20);
+      save(STORAGE_KEYS.settings, s);
     }
 
     initNav() {
@@ -715,34 +797,40 @@ if (page === 'grammar') this.renderGrammarList();
     }
 
     applySettingsUI() {
-      document.getElementById('setting-sentence-limit').value = this.settings.sentenceLimit;
-      document.getElementById('setting-word-limit').value = this.settings.wordLimit ?? 20;
-      document.getElementById('setting-grammar-limit').value = this.settings.grammarLimit;
-document.getElementById('setting-review-limit-en').value = this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
-document.getElementById('setting-review-limit-zh').value = this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
-document.getElementById('setting-review-limit-grammar').value = this.settings.reviewLimitGrammar ?? 30;
-document.getElementById('setting-voice-lang').value = this.settings.voiceLang;
-document.getElementById('setting-voice-rate').value = this.settings.voiceRate;
-document.getElementById('setting-day-tz').value = this.settings.dayTimezone || 'Asia/Qatar';
-      document.getElementById('setting-gist-id').value = this.settings.gistId || '';
-      document.getElementById('setting-gist-token').value = this.settings.gistToken || '';
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+      set('setting-new-word-en', this.settings.newWordEn);
+      set('setting-new-word-zh', this.settings.newWordZh);
+      set('setting-rev-word-en', this.settings.revWordEn);
+      set('setting-rev-word-zh', this.settings.revWordZh);
+      set('setting-new-sentence-en', this.settings.newSentenceEn);
+      set('setting-new-sentence-zh', this.settings.newSentenceZh);
+      set('setting-rev-sentence-en', this.settings.revSentenceEn);
+      set('setting-rev-sentence-zh', this.settings.revSentenceZh);
+      set('setting-new-grammar', this.settings.newGrammar);
+      set('setting-rev-grammar', this.settings.revGrammar);
+      set('setting-voice-lang', this.settings.voiceLang);
+      set('setting-voice-rate', this.settings.voiceRate);
+      set('setting-day-tz', this.settings.dayTimezone || 'Asia/Qatar');
+      set('setting-gist-id', this.settings.gistId || '');
+      set('setting-gist-token', this.settings.gistToken || '');
     }
 
     saveSettings() {
-      const oldCaps = {
-        sentenceLimit: this.settings.sentenceLimit,
-        wordLimit: this.settings.wordLimit,
-        grammarLimit: this.settings.grammarLimit,
-        reviewLimitEn: this.settings.reviewLimitEn,
-        reviewLimitZh: this.settings.reviewLimitZh,
-        reviewLimitGrammar: this.settings.reviewLimitGrammar
+      const CAP_IDS = {
+        newWordEn: 'setting-new-word-en', newWordZh: 'setting-new-word-zh',
+        revWordEn: 'setting-rev-word-en', revWordZh: 'setting-rev-word-zh',
+        newSentenceEn: 'setting-new-sentence-en', newSentenceZh: 'setting-new-sentence-zh',
+        revSentenceEn: 'setting-rev-sentence-en', revSentenceZh: 'setting-rev-sentence-zh',
+        newGrammar: 'setting-new-grammar', revGrammar: 'setting-rev-grammar'
       };
-      this.settings.sentenceLimit = parseInt(document.getElementById('setting-sentence-limit').value) || 20;
-      this.settings.wordLimit = parseInt(document.getElementById('setting-word-limit').value) || 20;
-      this.settings.grammarLimit = parseInt(document.getElementById('setting-grammar-limit').value) || 20;
-this.settings.reviewLimitEn = parseInt(document.getElementById('setting-review-limit-en').value) || 30;
-this.settings.reviewLimitZh = parseInt(document.getElementById('setting-review-limit-zh').value) || 30;
-this.settings.reviewLimitGrammar = parseInt(document.getElementById('setting-review-limit-grammar').value) || 30;
+      const oldCaps = {};
+      Object.keys(CAP_IDS).forEach(k => { oldCaps[k] = this.settings[k]; });
+      Object.keys(CAP_IDS).forEach(k => {
+        const el = document.getElementById(CAP_IDS[k]);
+        if (!el) return;
+        const v = parseInt(el.value, 10);
+        this.settings[k] = (v > 0 ? v : (k.indexOf('new') === 0 ? 10 : 30));
+      });
 this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
 this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
 this.settings.dayTimezone = document.getElementById('setting-day-tz').value;
@@ -756,54 +844,32 @@ this.checkDateRoll();
 this.refreshDashboard();
 }
 
-// A lowered daily limit takes effect immediately: randomly drop the overflow from the
-// running queue so it fits the new limit. Dropped tasks are left untouched — they stay
-// exactly as if they had never been studied today.
+// A lowered cap takes effect immediately for the channel being studied: randomly drop the
+// overflow from the running queue so it fits the new cap. Dropped tasks are left untouched —
+// they stay exactly as if they had never entered today.
 trimQueueToLimits(oldCaps) {
-  if (!this.studyQueue || !this.studyQueue.length) return 0;
+  if (!this.channel || !this.studyQueue || !this.studyQueue.length) return 0;
   const type = this.studyType;
-  // [new cap, previous cap] — only a limit that was actually lowered trims anything
-  const capFor = (isNew, dir) => {
-    if (type === 'grammar') return isNew
-      ? [this.settings.grammarLimit ?? 20, oldCaps && oldCaps.grammarLimit]
-      : [this.settings.reviewLimitGrammar ?? 30, oldCaps && oldCaps.reviewLimitGrammar];
-    if (isNew) return type === 'sentence'
-      ? [this.settings.sentenceLimit ?? 20, oldCaps && oldCaps.sentenceLimit]
-      : [this.settings.wordLimit ?? 20, oldCaps && oldCaps.wordLimit];
-    return [this.reviewCap(type, dir), dir === 'en2zh' ? (oldCaps && oldCaps.reviewLimitEn) : (oldCaps && oldCaps.reviewLimitZh)];
-  };
-  const groups = new Map();
-  this.studyQueue.forEach(t => {
-    const k = (t.isNew ? 'new' : 'rev') + '|' + (t.dir || 'grammar');
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(t);
-  });
-  const doomed = new Set();
-  let droppedNew = 0;
-  groups.forEach((tasks, k) => {
-    const parts = k.split('|');
-    const dir = parts[1] === 'grammar' ? null : parts[1];
-    const [cap, oldCap] = capFor(parts[0] === 'new', dir);
-    if (oldCap == null || !(cap < oldCap)) return;   // not lowered → leave the queue alone
-    const graded = tasks.filter(t => (t.seen || 0) > 0).length;
-    const ungraded = tasks.filter(t => !(t.seen || 0));
-    const allowed = Math.max(0, cap - graded);
-    if (ungraded.length <= allowed) return;
-    ungraded.slice().sort(() => Math.random() - 0.5)
-      .slice(0, ungraded.length - allowed)
-      .forEach(t => { doomed.add(t); if (t.isNew) droppedNew++; });
-  });
-  if (!doomed.size) return 0;
-  if (droppedNew) {
-    const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
-    this.daily[pickedKey] = Math.max(0, (this.daily[pickedKey] || 0) - droppedNew);
-    save(STORAGE_KEYS.daily, this.daily);
-  }
+  const parts = this.channel.split('|');
+  const dir = parts[1] === 'x' ? null : parts[1];
+  const isNew = this.studyIsNew;
+  const capKey = type === 'grammar'
+    ? (isNew ? 'newGrammar' : 'revGrammar')
+    : (isNew ? 'new' : 'rev') + (type === 'sentence' ? 'Sentence' : 'Word') + (dir === 'en2zh' ? 'En' : 'Zh');
+  const cap = this.channelCap(type, dir, isNew);
+  const oldCap = oldCaps ? oldCaps[capKey] : null;
+  if (oldCap == null || !(cap < oldCap)) return 0;   // not lowered → leave the queue alone
+  const graded = this.studyQueue.filter(t => (t.seen || 0) > 0).length;
+  const ungraded = this.studyQueue.filter(t => !(t.seen || 0));
+  const allowed = Math.max(0, cap - graded);
+  if (ungraded.length <= allowed) return 0;
+  const doomed = new Set(ungraded.slice().sort(() => Math.random() - 0.5).slice(0, ungraded.length - allowed));
   this.studyQueue = this.studyQueue.filter(t => !doomed.has(t));
-  this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - doomed.size);
-  this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - doomed.size);
+  const st = this.channelStat(type, dir, isNew);
+  st.total = st.done + this.studyQueue.length;
+  save(STORAGE_KEYS.daily, this.daily);
   if (!this.studyQueue.length) {
-    this.clearStudySession();
+    this.dropChannelSession(this.channel);
     if (this.currentPage === 'study') this.goPage('dashboard');
     return doomed.size;
   }
@@ -856,7 +922,7 @@ return;
 this.words = this.words.filter(it => !dropIds.has(it.id));
 save(STORAGE_KEYS.words, this.words);
 // queue/session may still reference removed entries
-this.clearStudySession();
+this.pruneSessions();
 this.refreshDashboard();
 this.syncToGist();
 const msg = '已清理 ' + dropIds.size + ' 条重复词条（' + groupCount + ' 组，如 ' + samples.join('、') + '），现共 ' + this.words.length + ' 词';
@@ -864,25 +930,30 @@ if (out) out.textContent = msg;
 this.toast(msg);
 }
 
-    // Remaining review slots left today for one scope (direction or grammar)
-    reviewRemaining(cap, dir) {
-      const d = this.daily || {};
-      const done = dir ? (d[dir + 'Done'] || 0) : (d.grammarDone || 0);
-      const isNew = dir ? (d[dir + 'New'] || 0) : (d.grammarNew || 0);
-      return Math.max(0, (cap || 0) - Math.max(0, done - isNew));
-    }
-
-    reviewCap(type, dir) {
-      if (type === 'grammar') return this.settings.reviewLimitGrammar ?? 30;
-      if (dir === 'en2zh') return this.settings.reviewLimitEn ?? this.settings.reviewLimit ?? 30;
-      return this.settings.reviewLimitZh ?? this.settings.reviewLimit ?? 30;
-    }
-
-    // Due queue: items whose nextReview has arrived. The daily cap only truncates the
-    // queue — nextReview is never rewritten here, so over-due items keep their date and
-    // stay first in line tomorrow instead of being silently pushed back.
-    getDueItems(items, type) {
+    // Backlog of one review channel — ignores today's cap (real 逾期 积压)
+    reviewBacklog(type, dir) {
       const today = this.today;
+      if (type === 'grammar') {
+        this.grammar.forEach(it => this.migrateGrammarState(it));
+        return this.grammar.filter(it => it.seen && (!it.nextReview || it.nextReview <= today)).length;
+      }
+      let n = 0;
+      this.getItemsByType(type).forEach(it => {
+        this.migrateSrs(it);
+        const s = it.srs[dir];
+        if (s.seen && (!s.nextReview || s.nextReview <= today)) n++;
+      });
+      return n;
+    }
+
+    // Due queue of one review channel. The daily cap only truncates the queue —
+    // nextReview is never rewritten here, so over-due items keep their date and stay
+    // first in line tomorrow instead of being silently pushed back.
+    dueForChannel(type, dir) {
+      const today = this.today;
+      const st = this.channelStat(type, dir, false);
+      const room = Math.max(0, this.channelCap(type, dir, false) - st.total);
+      if (room <= 0) return [];
       const cmp = (a, b) => {
         const da = a.nextReview || '0000-00-00';
         const db = b.nextReview || '0000-00-00';
@@ -891,56 +962,33 @@ this.toast(msg);
       };
 
       if (type === 'grammar') {
-        items.forEach(it => this.migrateGrammarState(it));
-        const cap = this.reviewRemaining(this.reviewCap('grammar'), null);
-        return items
+        this.grammar.forEach(it => this.migrateGrammarState(it));
+        return this.grammar
           .filter(it => it.seen && (!it.nextReview || it.nextReview <= today))
           .sort(cmp)
-          .slice(0, cap)
+          .slice(0, room)
           .map(it => ({ it: it, dir: null }));
       }
 
-      // Sentence/word: each direction is an independent review pool
       const candidates = [];
-      items.forEach(it => {
+      this.getItemsByType(type).forEach(it => {
         this.migrateSrs(it);
-        ['en2zh', 'zh2en'].forEach(dir => {
-          const s = it.srs[dir];
-          if (s.seen && (!s.nextReview || s.nextReview <= today)) candidates.push({ it: it, dir: dir });
-        });
+        const s = it.srs[dir];
+        if (s.seen && (!s.nextReview || s.nextReview <= today)) candidates.push({ it: it, dir: dir });
       });
       candidates.sort((a, b) => cmp(a.it.srs[a.dir], b.it.srs[b.dir]));
-
-      const rem = {
-        en2zh: this.reviewRemaining(this.reviewCap(type, 'en2zh'), 'en2zh'),
-        zh2en: this.reviewRemaining(this.reviewCap(type, 'zh2en'), 'zh2en')
-      };
-      const taken = { en2zh: 0, zh2en: 0 };
-      const due = [];
-      candidates.forEach(t => {
-        if (taken[t.dir] >= rem[t.dir]) return;
-        taken[t.dir]++;
-        due.push(t);
-      });
-      return due;
+      return candidates.slice(0, room);
     }
 
-    // Total due count ignoring today's cap (used to show the real backlog)
-    countDue(items, type) {
-      const today = this.today;
-      if (type === 'grammar') {
-        items.forEach(it => this.migrateGrammarState(it));
-        return items.filter(it => it.seen && (!it.nextReview || it.nextReview <= today)).length;
-      }
-      let n = 0;
-      items.forEach(it => {
+    // Unlearned pool of one new-item channel
+    newPoolFor(type, dir) {
+      const items = this.getItemsByType(type);
+      if (type === 'grammar') return items.filter(it => !this.isItemLearned(it, 'grammar'));
+      return items.filter(it => {
         this.migrateSrs(it);
-        ['en2zh', 'zh2en'].forEach(dir => {
-          const s = it.srs[dir];
-          if (s.seen && (!s.nextReview || s.nextReview <= today)) n++;
-        });
+        if (dir === 'en2zh') return !this.dirStudied(it, 'en2zh') && this.dirStudied(it, 'zh2en');
+        return !this.dirStudied(it, 'zh2en');
       });
-      return n;
     }
 
 getItemsByType(type) {
@@ -1046,69 +1094,100 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 }
 
     refreshDashboard() {
-      const sDue = this.getDueItems(this.sentences, 'sentence');
-      const gDue = this.getDueItems(this.grammar, 'grammar');
-      const wDue = this.getDueItems(this.words, 'word');
-      // Big number = what you can do today; the note shows the real backlog when the
-      // daily cap is the binding constraint
-      const setDueCard = (prefix, allowed, backlog) => {
-        document.getElementById('dash-' + prefix + '-review').textContent = allowed;
-        const note = document.getElementById('dash-' + prefix + '-review-note');
-        if (note) note.textContent = backlog > allowed ? ('到期 ' + backlog + ' · 今日上限 ' + allowed) : '';
-      };
-      setDueCard('sentence', sDue.length, this.countDue(this.sentences, 'sentence'));
-      setDueCard('grammar', gDue.length, this.countDue(this.grammar, 'grammar'));
-      setDueCard('word', wDue.length, this.countDue(this.words, 'word'));
+      const CARDS = [
+        { type: 'word', dirs: ['zh2en', 'en2zh'] },
+        { type: 'sentence', dirs: ['zh2en', 'en2zh'] },
+        { type: 'grammar', dirs: [null] }
+      ];
+      CARDS.forEach(c => {
+        const box = document.getElementById('dash-rows-' + c.type);
+        if (box) {
+          let html = '';
+          c.dirs.forEach(dir => [true, false].forEach(isNew => { html += this.channelRowHtml(c.type, dir, isNew); }));
+          box.innerHTML = html;
+        }
+        const pool = document.getElementById('dash-' + c.type + '-pool');
+        if (pool) pool.innerHTML = this.poolStatsHtml(c.type);
+      });
+    }
 
-      const setPool = (learned, total, dashEl, statsEl) => {
-        const text = '已背诵 ' + learned + ' · 未背诵 ' + (total - learned);
-        document.getElementById(dashEl).textContent = text;
-        const se = document.getElementById(statsEl);
-        if (se) se.textContent = text;
-      };
-      const learnedCount = (arr, type) => arr.filter(it => this.isItemLearned(it, type)).length;
-      setPool(learnedCount(this.grammar, 'grammar'), this.grammar.length, 'dash-grammar-new', 'grammar-pool-stats');
+    // 一个频道一行：剩余 X / 总任务 Y / 上限 Z
+    channelRowHtml(type, dir, isNew) {
+      const key = this.channelKey(type, dir, isNew);
+      const st = this.channelStat(type, dir, isNew);
+      const cap = this.channelCap(type, dir, isNew);
+      const sess = this.sessions[key];
+      const hasSess = !!(sess && sess.tasks && sess.index < sess.tasks.length);
+      // 未开始前先预览“今天到期多少”：成为总任务 Y 的待定值
+      let total = st.total || 0;
+      if (!isNew && !hasSess && !total) total = Math.min(this.reviewBacklog(type, dir), cap);
+      const left = Math.max(0, total - (st.done || 0));
+      const finished = total > 0 && left === 0 && !hasSess;
+      const dirArg = dir || 'x';
+      let btn;
+      if (hasSess) {
+        btn = '<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">继续</button>';
+      } else if (finished) {
+        btn = '<span style="font-size:12px;color:var(--success);white-space:nowrap;">今日已完</span>';
+      } else {
+        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">' + (isNew ? '选新学' : '开始') + '</button>';
+      }
+      return '<div style="display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #f2efe6;">' +
+        '<span style="font-size:13px;color:' + (finished ? 'var(--text-light)' : 'var(--text)') + ';flex:1;min-width:0;">' + this.channelName(type, dir, isNew) + '</span>' +
+        '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">剩余 ' +
+          '<b style="font-size:13px;color:' + (finished ? 'var(--text-light)' : 'var(--primary)') + ';">' + left + '</b>' +
+          ' / 总任务 ' + total + ' / 上限 ' + cap + '</span>' +
+        btn + '</div>';
+    }
 
-      // Sentence/word: show pool stats per direction (each direction is an independent pool)
-      const self = this;
-      const dirPoolText = (arr, dir, name) => {
-        const learned = arr.filter(it => self.dirStudied(it, dir)).length;
+    poolStatsHtml(type) {
+      if (type === 'grammar') {
+        const learned = this.grammar.filter(it => this.isItemLearned(it, 'grammar')).length;
+        return '已背诵 ' + learned + ' · 未背诵 ' + (this.grammar.length - learned);
+      }
+      const arr = this.getItemsByType(type);
+      const line = (dir, name) => {
+        const learned = arr.filter(it => this.dirStudied(it, dir)).length;
         return name + '：已背 ' + learned + ' · 未背 ' + (arr.length - learned);
       };
-      const setPool2 = (arr, dashEl, statsEl) => {
-        const text = dirPoolText(arr, 'en2zh', '英译中') + '<br>' + dirPoolText(arr, 'zh2en', '中译英');
-        const de = document.getElementById(dashEl);
-        if (de) de.innerHTML = text;
-        const se = document.getElementById(statsEl);
-        if (se) se.innerHTML = text;
-      };
-      setPool2(this.sentences, 'dash-sentence-new', 'sentence-pool-stats');
-      setPool2(this.words, 'dash-word-new', 'word-pool-stats');
-
-      const done = (this.daily.sentenceDone || 0) + (this.daily.grammarDone || 0) + (this.daily.wordDone || 0);
-      const total = sDue.length + gDue.length + wDue.length;
-      document.getElementById('today-en2zh').textContent = this.daily.en2zhDone || 0;
-      document.getElementById('today-zh2en').textContent = this.daily.zh2enDone || 0;
-      document.getElementById('today-grammar').textContent = this.daily.grammarDone || 0;
-      document.getElementById('today-total').textContent = total;
-      this.updateDirTabs();
-      // Show resume entry when an unfinished study session exists
-      const rc = document.getElementById('resume-card');
-      if (rc) {
-        let sess = null;
-        try { sess = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
-        if (sess && sess.tasks && sess.index < sess.tasks.length) {
-          const label = sess.type === 'sentence' ? '句子' : sess.type === 'word' ? '单词' : '语法';
-const taskTotal = sess.taskTotal != null ? sess.taskTotal : sess.tasks.length;
-const total = sess.total != null ? sess.total : sess.tasks.length;
-const leftPasses = Math.max(0, total - (sess.done || 0));
-document.getElementById('resume-text').textContent = '上次学习未完成：' + label + '，本次任务数 ' + taskTotal + ' · 实时总任务 ' + leftPasses;
-          rc.style.display = 'block';
-        } else {
-          rc.style.display = 'none';
-        }
-      }
+      return line('en2zh', '英译中') + ' ｜ ' + line('zh2en', '中译英');
     }
+
+    // Entry of one channel: resume if unfinished, otherwise start it fresh
+    openChannel(type, dir, isNew) {
+      const d = dir === 'x' || !dir ? null : dir;
+      const key = this.channelKey(type, d, isNew);
+      const sess = this.sessions[key];
+      if (sess && sess.tasks && sess.index < sess.tasks.length) return this.resumeChannel(key);
+      return isNew ? this.openNewPicker(type, d) : this.startReviewChannel(type, d);
+    }
+
+    startReviewChannel(type, dir) {
+      const due = this.dueForChannel(type, dir);
+      if (!due.length) {
+        if (this.reviewBacklog(type, dir) > 0) return this.toast('这个频道的今日上限已用完，剩下的明天继续');
+        return this.toast('这个频道今天没有到期内容');
+      }
+      this.beginSession(type, dir, false, due.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0 })));
+    }
+
+    // 一次会话只含一个频道的任务，新学与复习不再混排
+    beginSession(type, dir, isNew, queue) {
+      const st = this.channelStat(type, dir, isNew);
+      st.total = Math.max(st.total, st.done + queue.length);
+      save(STORAGE_KEYS.daily, this.daily);
+      this.studyType = type;
+      this.studyDir = dir;
+      this.studyIsNew = isNew;
+      this.channel = this.channelKey(type, dir, isNew);
+      this.studyQueue = queue;
+      this.studyIndex = 0;
+      this.studyDone = 0;
+      this.saveStudySession();
+      this.goPage('study');
+      this.renderStudyCard();
+    }
+
 
     // 解析一行「内容 | 音标 | 中文」（兼容旧顺序「内容 | 中文 | 音标」）
     splitEntry(line) {
@@ -1402,62 +1481,28 @@ document.getElementById('resume-text').textContent = '上次学习未完成：' 
     }
 
 // Study
-goStudy(type) {
-this.studyType = type;
-const items = this.getItemsByType(type);
-const queue = this.filterByDir(this.getDueItems(items, type), type);
-if (!queue.length) {
-this.toast('今天没有需要复习的内容，可通过「选择新学」学习新内容');
-return;
-}
-this.studyQueue = queue.map(t => ({ it: t.it, dir: t.dir, isNew: false, budget: 0, seen: 0 }));
-this.studyIndex = 0;
-this.studyDone = 0;
-this.studyTotal = this.studyQueue.length;
-this.studyTaskTotal = this.studyQueue.length;
-this.saveStudySession();
-this.goPage('study');
-this.renderStudyCard();
-}
 
-// Open picker modal to manually choose new items from the unlearned pool
-openNewPicker(type) {
+// Open picker modal to manually choose new items from one direction's unlearned pool
+openNewPicker(type, dir) {
 const items = this.getItemsByType(type);
-// Direction-aware: en2zh mode = sequential chain (only items ALREADY learned via zh2en);
-// zh2en mode = open pool (any item whose zh2en is unlearned, ignoring en2zh status)
-// all mode: any-direction-unlearned items are pickable (both tasks created)
-const pool = items.filter(it => {
-if (type === 'grammar') return !this.isItemLearned(it, type);
-this.migrateSrs(it);
-if (this.dirFilter === 'en2zh') return !this.dirStudied(it, 'en2zh') && this.dirStudied(it, 'zh2en');
-if (this.dirFilter === 'zh2en') return !this.dirStudied(it, 'zh2en');
-return !this.isItemLearned(it, type);
-});
+const pool = this.newPoolFor(type, dir);
 const label = type === 'sentence' ? '句子' : type === 'word' ? '单词' : '语法';
 if (!pool.length) {
-if (type !== 'grammar' && this.dirFilter === 'en2zh') this.toast('没有可选的' + label + '：英译中模式只显示已背过中译英的内容');
-else if (type !== 'grammar' && this.dirFilter === 'zh2en') this.toast('所有' + label + '的中译英都已背过');
+if (type !== 'grammar' && dir === 'en2zh') this.toast('没有可选的' + label + '：英译中只显示已背过中译英的内容');
+else if (type !== 'grammar' && dir === 'zh2en') this.toast('所有' + label + '的中译英都已背过');
 else this.toast('未背诵池是空的，先导入一些' + label + '吧');
 return;
 }
-const alreadyNew = type === 'sentence'
-? '英译中 ' + (this.daily.senEnNew || 0) + ' · 中译英 ' + (this.daily.senZhNew || 0)
-: type === 'word'
-? '英译中 ' + (this.daily.wordEnNew || 0) + ' · 中译英 ' + (this.daily.wordZhNew || 0)
-: String(this.daily.grammarNew || 0);
-const newLabel = type === 'grammar' ? '今日已新学 ' + alreadyNew + ' 条' : '今日已新学：' + alreadyNew;
-const poolNote = type === 'grammar' || this.dirFilter === 'all' ? '未背诵池' : (this.dirFilter === 'en2zh' ? '已背过中译英 · 待背英译中' : '未背过中译英');
-// Daily new-item cap (per module, across both directions) — counts tasks CREATED today (incl. unfinished sessions)
-const limit = type === 'sentence' ? (this.settings.sentenceLimit || 20) : type === 'word' ? (this.settings.wordLimit || 20) : (this.settings.grammarLimit || 20);
-const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
-const usedToday = this.daily[pickedKey] || 0;
-const rem = Math.max(0, limit - usedToday);
+const cap = this.channelCap(type, dir, true);
+const st = this.channelStat(type, dir, true);
+const rem = Math.max(0, cap - st.total);
 if (rem === 0) {
-this.toast('今日新学上限已用完（' + usedToday + '/' + limit + '），明天再来或在设置里调高每日上限');
+this.toast('这个频道的今日新学上限已用完（' + st.total + '/' + cap + '），明天再来或在设置里调高上限');
 return;
 }
 this._pickerRemaining = rem;
-const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${poolNote}共 ${pool.length} 条 · ${newLabel} · 今日还可新学 ${rem} 条</div>` +
+const poolNote = type === 'grammar' ? '未背诵池' : (dir === 'en2zh' ? '已背过中译英 · 待背英译中' : '未背过中译英');
+const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${this.channelName(type, dir, true)} · ${poolNote}共 ${pool.length} 条 · 今日还可新学 ${rem} 条</div>` +
 `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
 <span id="picker-count" style="font-size:13px;font-weight:600;color:var(--primary);">已选 0 条</span>
 <span style="flex:1;"></span>
@@ -1470,14 +1515,14 @@ pool.map(it => `
 <span style="font-size:14px;">${this.escape(type === 'sentence' ? it.english : type === 'word' ? it.word : (it.rule || '').split('\n')[0])}</span>
 </label>
 `).join('');
-this.openModal(`选择要新学的${label}`, body, () => {
+this.openModal(`选择要新学的${label}` + (dir ? ' · ' + (dir === 'en2zh' ? '英译中' : '中译英') : ''), body, () => {
 let checked = Array.from(document.querySelectorAll('#modal-body .new-pick:checked')).map(cb => cb.value);
 if (!checked.length) { this.toast('请先勾选要学习的内容'); return; }
 if (checked.length > rem) {
 checked = checked.slice(0, rem);
 this.toast('超出今日上限，已截取前 ' + rem + ' 条');
 }
-this.startStudyWithNew(type, checked);
+this.startNewChannel(type, dir, checked);
 });
 }
 
@@ -1503,69 +1548,32 @@ shuffled.slice(0, n).forEach(cb => { cb.checked = true; });
 this.pickerChanged();
 }
 
-// Start a study session with manually chosen new items + due reviews interleaved
-startStudyWithNew(type, newIds) {
+// Start the new-item channel: only new tasks, never mixed with due reviews
+startNewChannel(type, dir, newIds) {
 const items = this.getItemsByType(type);
-const chosenItems = newIds.map(id => items.find(x => x.id === id)).filter(Boolean);
-const chosenTasks = [];
-chosenItems.forEach(it => {
-if (type === 'grammar') {
-chosenTasks.push({ it: it, dir: null, isNew: true, budget: 0, seen: 0 });
-} else {
-// Selected directions follow the current filter (default: both directions)
-this.migrateSrs(it);
-if (this.dirFilter !== 'zh2en') chosenTasks.push({ it: it, dir: 'en2zh', isNew: true, budget: 0, seen: 0 });
-if (this.dirFilter !== 'en2zh') chosenTasks.push({ it: it, dir: 'zh2en', isNew: true, budget: 0, seen: 0 });
-}
+const queue = newIds.map(id => items.find(x => x.id === id)).filter(Boolean)
+.map(it => {
+if (type !== 'grammar') this.migrateSrs(it);
+return { it: it, dir: dir || null, isNew: true, budget: 0, seen: 0 };
 });
-const reviews = this.filterByDir(this.getDueItems(items, type), type)
-.map(t => ({ it: t.it, dir: t.dir, isNew: false, budget: 0, seen: 0 }));
-const out = [];
-let ni = 0, ri = 0;
-const total = chosenTasks.length + reviews.length;
-const newInterval = chosenTasks.length > 0 ? Math.max(1, Math.floor(total / (chosenTasks.length + 1))) : 0;
-while (ri < reviews.length || ni < chosenTasks.length) {
-if (ni < chosenTasks.length && (out.length % (newInterval + 1) === newInterval || ri >= reviews.length)) {
-out.push(chosenTasks[ni++]);
-} else if (ri < reviews.length) {
-out.push(reviews[ri++]);
-}
-}
-this.studyType = type;
-this.studyQueue = out;
-this.studyIndex = 0;
-this.studyDone = 0;
-this.studyTotal = out.length;
-this.studyTaskTotal = out.length;
-// Count CREATED new tasks against the daily allowance immediately (even if not yet graded)
-const pickedKey = type === 'sentence' ? 'senPicked' : type === 'word' ? 'wordPicked' : 'gramPicked';
-this.daily[pickedKey] = (this.daily[pickedKey] || 0) + chosenTasks.length;
-save(STORAGE_KEYS.daily, this.daily);
-this.saveStudySession();
+if (!queue.length) return;
+this.beginSession(type, dir, true, queue);
 this.closeModal();
-this.goPage('study');
-this.renderStudyCard();
 }
 
 renderStudyCard() {
 // Switching cards stops any ongoing auto-pronunciation
 this.stopSpeak();
-// Header: (a) distinct tasks still waiting, (b) distinct items behind them,
-// (c) how many passes are still owed today (each task owes 1 pass until graded,
-// then its own budget: 5 for 认识, 15 for 模糊/忘记)
-const leftTasks = this.studyQueue.length;
-const leftItems = new Set(this.studyQueue.map(t => (t.it && t.it.id) || '')).size;
-const totalTasks = this.studyTotal || leftTasks;
-const leftPasses = Math.max(0, totalTasks - (this.studyDone || 0));
-// 本次任务数 = 会话开始时的任务总数（固定），剩余量看下面两行
-document.getElementById('study-progress').textContent = '本次任务数 ' + (this.studyTaskTotal || leftTasks);
-const wordsEl = document.getElementById('study-words-left');
-if (wordsEl) {
-  const unit = this.studyType === 'sentence' ? '剩余句子数 ' : this.studyType === 'word' ? '剩余单词数 ' : '剩余语法数 ';
-  wordsEl.textContent = unit + leftItems;
-}
-const remEl = document.getElementById('study-remaining');
-if (remEl) remEl.textContent = '实时总任务 ' + leftPasses;
+// Header: 剩余 X / 总任务 Y / 上限 Z —— 三个数字同属当前频道，都按条目计
+const chDir = this.studyDir || null;
+const chCap = this.channelCap(this.studyType, chDir, this.studyIsNew);
+const chStat = this.channelStat(this.studyType, chDir, this.studyIsNew);
+const chTotal = chStat.total || this.studyQueue.length;
+const chLeft = Math.max(0, chTotal - (chStat.done || 0));
+const setHead = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+setHead('study-left', '剩余 ' + chLeft);
+setHead('study-total', '总任务 ' + chTotal);
+setHead('study-limit', '上限 ' + chCap);
 const task = this.studyQueue[this.studyIndex];
 if (!task) return;
 const item = task.it;
@@ -1587,7 +1595,7 @@ const item = task.it;
       }
 
       const typeName = isSentence ? '句子' : isWord ? '单词' : '语法';
-      const label = dir ? (typeName + ' · ' + (dir === 'en2zh' ? '英译中' : '中译英')) : '语法 · 回忆';
+      const label = this.channelName(this.studyType, dir, this.studyIsNew);
       document.getElementById('study-type-label').textContent = label;
 
       let prompt = '', answer = '';
@@ -1629,7 +1637,6 @@ const item = task.it;
         this.speak(englishText, isSentence ? 1 : 3);
       }
 
-      this.updateDirTabs();
       this.updateNavButtons();
     }
 
@@ -1711,15 +1718,15 @@ save(STORAGE_KEYS.grammar, this.grammar);
 // Drop every slot pointing at the deleted item (both directions)
 const removed = this.studyQueue.filter(t => t.it && t.it.id === item.id);
 this.studyQueue = this.studyQueue.filter(t => !t.it || t.it.id !== item.id);
-const owed = removed.reduce((a, t) => a + (t.budget ? Math.max(0, t.budget - (t.seen || 0)) : 1), 0);
-this.studyTotal = Math.max(this.studyQueue.length, (this.studyTotal || 0) - owed);
-this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - removed.length);
+// 该通道今天的总数同步减掉被删掉的条目
+if (removed.length) this.bumpChannel(this.studyType, this.studyDir || null, this.studyIsNew, -removed.length);
 
 this.refreshDashboard();
 this.syncToGist();
 
-if (this.studyIndex >= this.studyQueue.length) {
-this.clearStudySession();
+if (this.studyIndex >= this.studyQueue.length || !this.studyQueue.length) {
+this.dropChannelSession(this.channel);
+this.studyQueue = [];
 this.toast('已删除并同步云端，本轮任务已全部完成');
 this.goPage('dashboard');
 } else {
@@ -1788,7 +1795,6 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       // 模糊/忘记 → 15 passes. Every pass is counted, re-appearances included.
       if (firstPass) {
         task.budget = quality === 3 ? 5 : 15;
-        this.studyTotal = (this.studyTotal || 0) + task.budget - 1;
       }
       task.seen = (task.seen || 0) + 1;
 
@@ -1830,16 +1836,21 @@ if (isSentence) save(STORAGE_KEYS.sentences, this.sentences);
 else if (this.studyType === 'word') save(STORAGE_KEYS.words, this.words);
 else save(STORAGE_KEYS.grammar, this.grammar);
 this.scheduleSync();
-this.studyDone = (this.studyDone || 0) + 1;
 
 // Same-day re-appearance without cloning the queue entry: the task keeps a single
-// slot and rotates to the tail until today's pass budget is used up.
+// slot and rotates to the tail until today's pass budget is used up. Only a task that
+// finished its whole budget counts as written off for its channel.
 const cur = this.studyIndex;
 this.studyQueue.splice(cur, 1);
-if ((task.seen || 0) < (task.budget || 1)) this.studyQueue.push(task);
+if ((task.seen || 0) < (task.budget || 1)) {
+  this.studyQueue.push(task);
+} else {
+  this.channelStat(this.studyType, task.dir || null, this.studyIsNew).done++;
+  save(STORAGE_KEYS.daily, this.daily);
+}
 if (!this.studyQueue.length) {
-this.clearStudySession();
-this.toast('今日任务完成 🎉 全部背完，辛苦啦');
+this.dropChannelSession(this.channel);
+this.toast('这个频道今天背完了 🎉');
 this.goPage('dashboard');
 return;
 }
@@ -1882,110 +1893,93 @@ this.toast('已经是最后一句了');
       this.refreshDashboard();
     }
 
-    // Persist the in-progress study session so it survives page reloads/exits
+    // Persist each channel's in-progress session separately, so switching channels
+    // never drops what you were doing
     saveStudySession() {
-      if (!this.studyQueue || !this.studyQueue.length || this.studyIndex >= this.studyQueue.length) return;
-save(STORAGE_KEYS.session, {
-type: this.studyType,
-date: this.today,
-index: this.studyIndex,
-done: this.studyDone || 0,
-total: this.studyTotal || this.studyQueue.length,
-taskTotal: this.studyTaskTotal || this.studyQueue.length,
-tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0 }))
-});
+      if (!this.channel) return;
+      if (!this.studyQueue || !this.studyQueue.length || this.studyIndex >= this.studyQueue.length) {
+        this.dropChannelSession(this.channel);
+        return;
+      }
+      this.sessions[this.channel] = {
+        type: this.studyType,
+        dir: this.studyDir || null,
+        isNew: !!this.studyIsNew,
+        date: this.today,
+        index: this.studyIndex,
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0 }))
+      };
+      save(STORAGE_KEYS.sessions, this.sessions);
+    }
+
+    dropChannelSession(key) {
+      if (!key || !this.sessions || !this.sessions[key]) return;
+      delete this.sessions[key];
+      save(STORAGE_KEYS.sessions, this.sessions);
     }
 
     clearStudySession() {
-      try { localStorage.removeItem(STORAGE_KEYS.session); } catch (e) {}
+      this.sessions = {};
+      save(STORAGE_KEYS.sessions, this.sessions);
     }
 
-    resumeSession() {
-      let s = null;
-      try { s = JSON.parse(localStorage.getItem(STORAGE_KEYS.session) || 'null'); } catch (e) {}
-      if (!s || !s.tasks || !s.tasks.length || s.index >= s.tasks.length) { this.clearStudySession(); return; }
+    // 词库变动后，把每个频道会话里已经不存在的条目剔除
+    pruneSessions() {
+      const ids = new Set([...this.sentences, ...this.words, ...this.grammar].map(x => x.id));
+      let changed = false;
+      Object.keys(this.sessions || {}).forEach(k => {
+        const s = this.sessions[k];
+        const kept = (s.tasks || []).filter(t => ids.has(t.id));
+        if (!kept.length) { delete this.sessions[k]; changed = true; return; }
+        if (kept.length !== (s.tasks || []).length) {
+          s.tasks = kept;
+          if ((s.index || 0) >= kept.length) s.index = 0;
+          changed = true;
+        }
+      });
+      if (changed) save(STORAGE_KEYS.sessions, this.sessions);
+      if (this.channel && !this.sessions[this.channel]) this.channel = null;
+    }
+
+    // Resume one channel's unfinished queue
+    resumeChannel(key) {
+      const s = this.sessions && this.sessions[key];
+      if (!s || !s.tasks || !s.tasks.length || s.index >= s.tasks.length) { this.dropChannelSession(key); return; }
       const all = [...this.sentences, ...this.words, ...this.grammar];
       const sameDay = s.date === this.today;
-      // Only the unfinished tail matters; completed tasks are already settled.
-      // Older sessions stored one entry per re-appearance — dedupe by item+direction
-      // so the queue keeps exactly one slot per task. Today's leftover allowance and
-      // hence the leftover pass count still apply when resuming.
-      const rest = s.tasks.slice(s.index || 0);
-      const rem = {
-        en2zh: this.reviewRemaining(this.reviewCap(s.type, 'en2zh'), 'en2zh'),
-        zh2en: this.reviewRemaining(this.reviewCap(s.type, 'zh2en'), 'zh2en'),
-        grammar: this.reviewRemaining(this.reviewCap('grammar'), null)
-      };
-      const taken = { en2zh: 0, zh2en: 0, grammar: 0 };
       const queue = [];
-      const seenKeys = new Set();
-      let dropped = 0;
-      rest.forEach(t => {
+      const seen = new Set();
+      // 从当前卡片开始，前面的待背任务接到后面，避免恢复时丢任务
+      const ordered = s.tasks.slice(s.index || 0).concat(s.tasks.slice(0, s.index || 0));
+      ordered.forEach(t => {
         const it = all.find(x => x.id === t.id);
         if (!it) return;
-        const key = t.dir || 'grammar';
-        const uniq = t.id + '|' + key;
-        if (seenKeys.has(uniq)) return;   // same task listed again: one slot only
-        seenKeys.add(uniq);
-        if (taken[key] >= rem[key]) { dropped++; return; }   // over today's cap: stays due for later
-        taken[key]++;
+        const uniq = t.id + '|' + (t.dir || 'x');
+        if (seen.has(uniq)) return;   // one slot per task
+        seen.add(uniq);
         queue.push({
           it: it, dir: t.dir || null, isNew: !!t.isNew,
           budget: sameDay ? (t.budget || 0) : 0,
           seen: sameDay ? (t.seen || 0) : 0
         });
       });
-      if (!queue.length) { this.clearStudySession(); return; }
-this.studyType = s.type;
-this.studyQueue = queue;
-this.studyIndex = 0;
-const done = sameDay ? (s.done || 0) : 0;
-this.studyDone = done;
-if (sameDay && s.total != null) this.studyTotal = Math.max(queue.length, s.total - dropped);
-else this.studyTotal = queue.length + done;
-if (sameDay && s.taskTotal != null) this.studyTaskTotal = Math.max(queue.length, s.taskTotal - dropped);
-else this.studyTaskTotal = queue.length + done;
+      if (!queue.length) { this.dropChannelSession(key); this.refreshDashboard(); return; }
+      this.studyType = s.type;
+      this.studyDir = s.dir || null;
+      this.studyIsNew = !!s.isNew;
+      this.channel = key;
+      this.studyQueue = queue;
+      this.studyIndex = 0;
+      this.studyDone = 0;
       this.goPage('study');
       this.renderStudyCard();
     }
 
-    // Direction filter: 'all' | 'en2zh' | 'zh2en' (grammar tasks have no direction and are always kept)
-    filterByDir(queue, type) {
-      if (type === 'grammar' || this.dirFilter === 'all') return queue;
-      return queue.filter(t => t.dir === this.dirFilter);
-    }
-
-    setDirFilter(d) {
-      this.dirFilter = d;
-      this.settings.dirFilter = d;
-      save(STORAGE_KEYS.settings, this.settings);
-      this.updateDirTabs();
-      if (this.currentPage !== 'study' || !this.studyQueue.length) return;
-      const before = this.studyQueue.slice(0, this.studyIndex);
-      const after = this.studyQueue.slice(this.studyIndex).filter(t => !t.dir || this.dirFilter === 'all' || t.dir === this.dirFilter);
-      const lenBefore = this.studyQueue.length;
-      this.studyQueue = before.concat(after);
-      const trimmedByDir = lenBefore - this.studyQueue.length;
-      if (trimmedByDir) this.studyTaskTotal = Math.max(this.studyQueue.length, (this.studyTaskTotal || 0) - trimmedByDir);
-      if (this.studyIndex >= this.studyQueue.length) {
-        this.toast('当前筛选下没有剩余任务');
-        this.goPage('dashboard');
-        return;
-      }
-      this.renderStudyCard();
-    }
-
-    updateDirTabs() {
-      ['dash-dir-'].forEach(pre => {
-        ['en2zh', 'zh2en'].forEach(k => {
-          const btn = document.getElementById(pre + k);
-          if (!btn) return;
-          const active = this.dirFilter === k;
-          btn.style.background = active ? 'var(--primary)' : '#fff';
-          btn.style.color = active ? '#fff' : 'var(--text)';
-          btn.style.borderColor = active ? 'var(--primary)' : 'var(--border)';
-        });
-      });
+    // Compat: pick any unfinished channel
+    resumeSession() {
+      const keys = Object.keys(this.sessions || {});
+      if (!keys.length) return;
+      return this.resumeChannel(keys[0]);
     }
 
     async pasteFromClipboard(textareaId) {
