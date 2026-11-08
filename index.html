@@ -505,7 +505,7 @@ revenue | ˈrevənjuː | 收入；营收
 <h3 id="modal-title">编辑</h3>
 <div class="modal-actions">
 <button class="btn btn-outline" onclick="app.closeModal()">取消</button>
-<button class="btn btn-primary" onclick="app.confirmModal()">保存</button>
+<button class="btn btn-primary" id="modal-confirm" onclick="app.confirmModal()">保存</button>
 </div>
 </div>
 <div id="modal-body" class="modal-body"></div>
@@ -1045,13 +1045,23 @@ const repScore = it => {
 const s = it.srs || {};
 return ['en2zh', 'zh2en'].reduce((a, d) => a + ((s[d] && s[d].stage) || 0), 0);
 };
+// 档位相同时，到期更晚的那条更像「在正常轨道上」，优先保留（避开留下已逾期很久的旧条目）
+const dueKey = it => {
+const s = it.srs || {};
+return ['en2zh', 'zh2en'].map(d => (s[d] && s[d].nextReview) || '').join('|');
+};
 const dropIds = new Set();
 const samples = [];
 let groupCount = 0;
 groups.forEach(list => {
 if (list.length < 2) return;
 groupCount++;
-const sorted = list.slice().sort((a, b) => repScore(b) - repScore(a));
+const sorted = list.slice().sort((a, b) => {
+const d = repScore(b) - repScore(a);
+if (d) return d;
+const da = dueKey(a), db = dueKey(b);
+return da < db ? 1 : da > db ? -1 : 0;
+});
 const keep = sorted[0];
 if (!keep.srs) this.migrateSrs(keep);
 if (samples.length < 3) samples.push(keep.word);
@@ -1060,7 +1070,11 @@ if (!x.srs) this.migrateSrs(x);
 ['en2zh', 'zh2en'].forEach(d => {
 const ks = keep.srs[d], xs = x.srs[d];
 // keep the more advanced per-direction progress
-if (ks && xs && (xs.stage || 0) > (ks.stage || 0)) keep.srs[d] = xs;
+if (ks && xs) {
+const dx = xs.stage || 0, ds = ks.stage || 0;
+// 档位更高，或同档但到期更晚 → 取这一边
+if (dx > ds || (dx === ds && (xs.nextReview || '') > (ks.nextReview || ''))) keep.srs[d] = xs;
+}
 });
 dropIds.add(x.id);
 });
@@ -1071,10 +1085,8 @@ if (out) out.textContent = '没有发现重复词条 👍';
 this.toast('没有发现重复词条 👍');
 return;
 }
-this.words = this.words.filter(it => !dropIds.has(it.id));
-save(STORAGE_KEYS.words, this.words);
-// queue/session may still reference removed entries
-this.pruneSessions();
+// 统一删除入口：会话、今日计数、学习页队列一起清
+this.removeItems('word', Array.from(dropIds));
 this.refreshDashboard();
 this.syncToGist();
 const msg = '已清理 ' + dropIds.size + ' 条重复词条（' + groupCount + ' 组，如 ' + samples.join('、') + '），现共 ' + this.words.length + ' 词';
@@ -1438,111 +1450,143 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       return { en: en, zh: zh, ph: ph };
     }
 
-    // Import
-    importSentences() {
+    // Import —— 一律先预览：把「识别到的前 5 条 + 总条数」摆出来，确认后才写库。
+    // 格式写错（比如把英文释义写在第二段、或多打了一个竖线）时能在这里看见，而不是悄悄存成错的东西。
+    importSentences() { this.previewImport('sentence'); }
+    importGrammar() { this.previewImport('grammar'); }
+    importWords() { this.previewImport('word'); }
+
+    importLabel(kind) { return kind === 'word' ? '单词' : kind === 'sentence' ? '句子' : '语法'; }
+
+    parseSentenceInput() {
       const raw = document.getElementById('sentence-input').value.trim();
-      if (!raw) return this.toast('请输入内容');
+      if (!raw) return null;
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
       const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
       const existing = new Set(this.sentences.map(it => norm(it.english)));
       const batchSeen = new Set();
-      let added = 0, dup = 0;
+      const rows = [], dup = [];
       let i = 0;
       while (i < lines.length) {
         const line = lines[i];
         let en = '', zh = '', ph = '';
         if (!line.includes('|') && i + 1 < lines.length) {
-          en = line;
-          zh = lines[i + 1];
-          i += 2;
+          en = line; zh = lines[i + 1]; i += 2;
         } else {
           const parsed = this.splitEntry(line);
           en = parsed.en; zh = parsed.zh; ph = parsed.ph;
           i++;
         }
-        if (en) {
-          const key = norm(en);
-          if (existing.has(key) || batchSeen.has(key)) { dup++; }
-          else {
-            existing.add(key); batchSeen.add(key);
-            this.sentences.push({
-              id: uuid(), english: en, chinese: zh, phonetic: ph,
-              createdAt: this.today,
-              stage: 0, seen: false, gradedOn: null, nextReview: null
-            });
-            added++;
-          }
-        }
+        if (!en) continue;
+        const key = norm(en);
+        if (existing.has(key) || batchSeen.has(key)) { dup.push({ en: en, zh: zh, ph: ph }); continue; }
+        batchSeen.add(key);
+        rows.push({ en: en, zh: zh, ph: ph });
       }
-      save(STORAGE_KEYS.sentences, this.sentences);
-      document.getElementById('sentence-input').value = '';
-      this.toast('成功导入 ' + added + ' 条句子' + (dup ? '，跳过重复 ' + dup + ' 条' : '') + '，当前共 ' + this.sentences.length + ' 条');
-      this.renderSentenceList();
-      this.refreshDashboard();
-      this.syncToGist();
+      return { rows: rows, dup: dup, lines: lines.length };
     }
 
-    importGrammar() {
+    parseGrammarInput() {
       const raw = document.getElementById('grammar-input').value.trim();
-      if (!raw) return this.toast('请输入内容');
+      if (!raw) return null;
       const blocks = raw.split(/===+/).map(b => b.trim()).filter(Boolean);
       const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
       const existing = new Set(this.grammar.map(it => norm(it.rule)));
       const batchSeen = new Set();
-      let added = 0, dup = 0;
+      const rows = [], dup = [];
       blocks.forEach(block => {
-        const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-        const text = lines.join('\n');
-        if (text) {
-          const key = norm(text);
-          if (existing.has(key) || batchSeen.has(key)) { dup++; return; }
-          existing.add(key); batchSeen.add(key);
-          this.grammar.push({
-            id: uuid(), rule: text,
-            createdAt: this.today,
-            stage: 0, seen: false, gradedOn: null, nextReview: null
-          });
-          added++;
-        }
+        const text = block.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+        if (!text) return;
+        const key = norm(text);
+        if (existing.has(key) || batchSeen.has(key)) { dup.push({ en: text }); return; }
+        batchSeen.add(key);
+        rows.push({ en: text });
       });
-      save(STORAGE_KEYS.grammar, this.grammar);
-      document.getElementById('grammar-input').value = '';
-      this.toast('成功导入 ' + added + ' 条语法' + (dup ? '，跳过重复 ' + dup + ' 条' : '') + '，当前共 ' + this.grammar.length + ' 条');
-      this.renderGrammarList();
+      return { rows: rows, dup: dup, lines: blocks.length };
+    }
+
+    previewImport(kind) {
+      const parsed = kind === 'word' ? this.parseWordInput() : kind === 'sentence' ? this.parseSentenceInput() : this.parseGrammarInput();
+      if (!parsed) return this.toast('请输入内容');
+      if (!parsed.rows.length && !parsed.dup.length) return this.toast('没有识别到可以导入的内容');
+      const label = this.importLabel(kind);
+      const shown = parsed.rows.slice(0, 5).map((r, i) => {
+        const no = '<span style="color:#b2bec3;">' + (i + 1) + '.</span> ';
+        if (kind === 'grammar') {
+          return '<div style="padding:7px 0;border-bottom:1px solid #f2efe6;font-size:13px;white-space:pre-wrap;">' + no + this.escape(r.en) + '</div>';
+        }
+        const missing = !r.zh || !/[\u4e00-\u9fa5]/.test(r.zh);
+        return '<div style="padding:7px 0;border-bottom:1px solid #f2efe6;font-size:13px;">' + no +
+          '<b>' + this.escape(r.en) + '</b>' +
+          (r.ph ? ' <span style="color:var(--primary);font-style:italic;">' + this.escape(r.ph) + '</span>' : '') +
+          '<div style="margin-top:3px;color:' + (missing ? '#e17055' : 'var(--text-light)') + ';">' +
+            (missing ? '⚠ 没识别到中文' + (kind === 'word' ? '释义' : '译文') : this.escape(r.zh)) +
+          '</div></div>';
+      }).join('');
+      const html =
+        '<div class="upload-hint" style="margin-bottom:10px;">以下是识别结果，确认无误再导入。导入后仍可在列表里逐条修改或删除。</div>' +
+        (shown || '<div class="upload-hint">没有新内容（全是重复）</div>') +
+        (parsed.rows.length > 5 ? '<div class="upload-hint" style="margin-top:8px;">还有 ' + (parsed.rows.length - 5) + ' 条未显示</div>' : '') +
+        '<div style="font-size:13px;margin-top:12px;">将导入 <b>' + parsed.rows.length + '</b> 条' + label +
+          (parsed.dup.length ? '；跳过重复 <b>' + parsed.dup.length + '</b> 条' : '') + '</div>' +
+        '<div class="upload-hint" style="margin-top:6px;">' +
+          (kind === 'grammar' ? '语法每条用 === 分隔，共 ' + parsed.lines + ' 条' : '识别了 ' + parsed.lines + ' 行') +
+        '</div>';
+      this.openModal('确认导入' + label, html, () => this.commitImport(kind, parsed), '确认导入');
+    }
+
+    commitImport(kind, parsed) {
+      const label = this.importLabel(kind);
+      const n = parsed.rows.length;
+      if (kind === 'word') {
+        parsed.rows.forEach(r => this.words.push({
+          id: uuid(), word: r.en, phonetic: r.ph, meaning: r.zh, createdAt: this.today,
+          stage: 0, seen: false, gradedOn: null, nextReview: null
+        }));
+        save(STORAGE_KEYS.words, this.words);
+        const ta = document.getElementById('word-input'); if (ta) ta.value = '';
+        this.renderWordList();
+      } else if (kind === 'sentence') {
+        parsed.rows.forEach(r => this.sentences.push({
+          id: uuid(), english: r.en, phonetic: r.ph, chinese: r.zh, createdAt: this.today,
+          stage: 0, seen: false, gradedOn: null, nextReview: null
+        }));
+        save(STORAGE_KEYS.sentences, this.sentences);
+        const ta = document.getElementById('sentence-input'); if (ta) ta.value = '';
+        this.renderSentenceList();
+      } else {
+        parsed.rows.forEach(r => this.grammar.push({
+          id: uuid(), rule: r.en, createdAt: this.today,
+          stage: 0, seen: false, gradedOn: null, nextReview: null
+        }));
+        save(STORAGE_KEYS.grammar, this.grammar);
+        const ta = document.getElementById('grammar-input'); if (ta) ta.value = '';
+        this.renderGrammarList();
+      }
+      this.closeModal();
       this.refreshDashboard();
+      this.toast('成功导入 ' + n + ' 条' + label + (parsed.dup.length ? '，跳过重复 ' + parsed.dup.length + ' 条' : '') + '，当前共 ' + this.getItemsByType(kind).length + ' 条');
       this.syncToGist();
     }
 
-    importWords() {
+    parseWordInput() {
       const raw = document.getElementById('word-input').value.trim();
-      if (!raw) return this.toast('请输入内容');
+      if (!raw) return null;
       const lines = raw.split(/\n+/).map(l => l.trim()).filter(Boolean);
       const norm = s => s.toLowerCase().replace(/\s+/g, ' ').trim();
       const existing = new Set(this.words.map(it => norm(it.word) + '||' + norm(it.meaning)));
       const batchSeen = new Set();
-      let added = 0, dup = 0;
+      const rows = [], dup = [];
       lines.forEach(line => {
         const parsed = this.splitEntry(line);
-        const word = parsed.en, meaning = parsed.zh, ph = parsed.ph;
-        if (word) {
-          // Duplicate only when BOTH word and meaning match (same word with different meaning is a new entry)
-          const key = norm(word) + '||' + norm(meaning);
-          if (existing.has(key) || batchSeen.has(key)) { dup++; return; }
-          existing.add(key); batchSeen.add(key);
-          this.words.push({
-            id: uuid(), word: word, phonetic: ph, meaning: meaning,
-            createdAt: this.today,
-            stage: 0, seen: false, gradedOn: null, nextReview: null
-          });
-          added++;
-        }
+        if (!parsed.en) return;
+        // 同一单词 + 同一释义才算重复（同一单词不同释义是另一条，会被留下）
+        const key = norm(parsed.en) + '||' + norm(parsed.zh);
+        if (existing.has(key) || batchSeen.has(key)) { dup.push({ en: parsed.en, zh: parsed.zh, ph: parsed.ph }); return; }
+        batchSeen.add(key);
+        rows.push({ en: parsed.en, zh: parsed.zh, ph: parsed.ph });
       });
-      save(STORAGE_KEYS.words, this.words);
-      document.getElementById('word-input').value = '';
-      this.toast('成功导入 ' + added + ' 个单词' + (dup ? '，跳过重复 ' + dup + ' 个' : '') + '，当前共 ' + this.words.length + ' 个');
-      this.renderWordList();
-      this.refreshDashboard();
-      this.syncToGist();
+      return { rows: rows, dup: dup, lines: lines.length };
     }
 
     renderWordList() {
@@ -1570,10 +1614,58 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       `).join('');
     }
 
+    // 删除词库条目的唯一入口：数组、所有通道会话、今日计数一起清。
+    // 只删数组会让别的通道会话还指着它，出现「剩余 4」但只能背 3 条的残局。
+    removeItems(type, ids) {
+      const set = new Set(ids || []);
+      if (!set.size) return 0;
+      if (type === 'word') this.words = this.words.filter(x => !set.has(x.id));
+      else if (type === 'sentence') this.sentences = this.sentences.filter(x => !set.has(x.id));
+      else this.grammar = this.grammar.filter(x => !set.has(x.id));
+      this.saveItems(type);
+
+      let dropped = 0;
+      // 会话里只允许留下「词库里还存在的条目」：刚删的、以及历史遗留的孤儿 id 一起清
+      const alive = new Set([...this.words, ...this.sentences, ...this.grammar].map(x => x.id));
+      Object.keys(this.sessions || {}).forEach(key => {
+        const s = this.sessions[key];
+        if (!s || !s.tasks || !s.tasks.length) return;
+        const kept = s.tasks.filter(t => alive.has(t.id));
+        const removedHere = s.tasks.length - kept.length;
+        if (!removedHere) return;
+        dropped += removedHere;
+        const parts = key.split('|');
+        const dir = parts[1] === 'x' ? null : parts[1];
+        const isNew = parts[2] === 'new';
+        this.bumpChannel(s.type, dir, isNew, -removedHere);
+        if (!kept.length) { delete this.sessions[key]; return; }
+        s.tasks = kept;
+        if ((s.index || 0) >= kept.length) s.index = 0;
+      });
+      save(STORAGE_KEYS.sessions, this.sessions);
+
+      // 正在学习页上的队列同样要清
+      if (this.studyQueue && this.studyQueue.length) {
+        const before = this.studyQueue.length;
+        this.studyQueue = this.studyQueue.filter(t => !t.it || !set.has(t.it.id));
+        const removedHere = before - this.studyQueue.length;
+        dropped += removedHere;
+        if (!this.studyQueue.length) {
+          if (this.channel) this.dropChannelSession(this.channel);
+          this.studyQueue = [];
+          this.studyIndex = 0;
+          if (this.currentPage === 'study') this.goPage('dashboard');
+        } else if (this.studyIndex >= this.studyQueue.length) {
+          this.studyIndex = Math.max(0, this.studyQueue.length - 1);
+        }
+      }
+      save(STORAGE_KEYS.daily, this.daily);
+      return dropped;
+    }
+
     deleteWord(id) {
       if (!confirm('确定删除这个单词吗？')) return;
-      this.words = this.words.filter(w => w.id !== id);
-      save(STORAGE_KEYS.words, this.words);
+      this.removeItems('word', [id]);
       this.renderWordList();
       this.refreshDashboard();
       this.syncToGist();
@@ -1656,8 +1748,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 
     deleteSentence(id) {
       if (!confirm('确定删除这条句子吗？')) return;
-      this.sentences = this.sentences.filter(s => s.id !== id);
-      save(STORAGE_KEYS.sentences, this.sentences);
+      this.removeItems('sentence', [id]);
       this.renderSentenceList();
       this.refreshDashboard();
       this.syncToGist();
@@ -1665,8 +1756,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 
     deleteGrammar(id) {
       if (!confirm('确定删除这条语法吗？')) return;
-      this.grammar = this.grammar.filter(g => g.id !== id);
-      save(STORAGE_KEYS.grammar, this.grammar);
+      this.removeItems('grammar', [id]);
       this.renderGrammarList();
       this.refreshDashboard();
       this.syncToGist();
@@ -1707,12 +1797,14 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       });
     }
 
-    openModal(title, bodyHtml, onConfirm) {
-      document.getElementById('modal-title').textContent = title;
-      document.getElementById('modal-body').innerHTML = bodyHtml;
-      document.getElementById('modal-overlay').classList.add('show');
-      this._modalConfirm = onConfirm;
-    }
+openModal(title, bodyHtml, onConfirm, confirmLabel) {
+document.getElementById('modal-title').textContent = title;
+document.getElementById('modal-body').innerHTML = bodyHtml;
+document.getElementById('modal-overlay').classList.add('show');
+const btn = document.getElementById('modal-confirm');
+if (btn) btn.textContent = confirmLabel || '保存';
+this._modalConfirm = onConfirm;
+}
 
     closeModal() {
       document.getElementById('modal-overlay').classList.remove('show');
@@ -1947,29 +2039,13 @@ const item = task.it;
 const label = item.word || item.english || item.rule || '本条';
 if (!confirm('确定删除「' + String(label).slice(0, 30) + '」吗？删除后不可恢复，会同步到云端词库')) return;
 
-if (this.studyType === 'word') {
-this.words = this.words.filter(w => w.id !== item.id);
-save(STORAGE_KEYS.words, this.words);
-} else if (this.studyType === 'sentence') {
-this.sentences = this.sentences.filter(s => s.id !== item.id);
-save(STORAGE_KEYS.sentences, this.sentences);
-} else {
-this.grammar = this.grammar.filter(g => g.id !== item.id);
-save(STORAGE_KEYS.grammar, this.grammar);
-}
-
-// Drop every slot pointing at the deleted item (both directions)
-const removed = this.studyQueue.filter(t => t.it && t.it.id === item.id);
-this.studyQueue = this.studyQueue.filter(t => !t.it || t.it.id !== item.id);
-// 该通道今天的总数同步减掉被删掉的条目
-if (removed.length) this.bumpChannel(this.studyType, this.studyDir || null, this.studyIsNew, -removed.length);
+// 统一入口：词库数组、所有通道会话、今日计数一起清（removeItems 内部会处理学习页队列）
+this.removeItems(this.studyType, [item.id]);
 
 this.refreshDashboard();
 this.syncToGist();
 
-if (this.studyIndex >= this.studyQueue.length || !this.studyQueue.length) {
-this.dropChannelSession(this.channel);
-this.studyQueue = [];
+if (!this.studyQueue.length) {
 this.toast('已删除并同步云端，本轮任务已全部完成');
 this.goPage('dashboard');
 } else {
@@ -2172,24 +2248,6 @@ this.toast('已经是最后一个' + unit + '了');
       save(STORAGE_KEYS.sessions, this.sessions);
     }
 
-    // 词库变动后，把每个频道会话里已经不存在的条目剔除
-    pruneSessions() {
-      const ids = new Set([...this.sentences, ...this.words, ...this.grammar].map(x => x.id));
-      let changed = false;
-      Object.keys(this.sessions || {}).forEach(k => {
-        const s = this.sessions[k];
-        const kept = (s.tasks || []).filter(t => ids.has(t.id));
-        if (!kept.length) { delete this.sessions[k]; changed = true; return; }
-        if (kept.length !== (s.tasks || []).length) {
-          s.tasks = kept;
-          if ((s.index || 0) >= kept.length) s.index = 0;
-          changed = true;
-        }
-      });
-      if (changed) save(STORAGE_KEYS.sessions, this.sessions);
-      if (this.channel && !this.sessions[this.channel]) this.channel = null;
-    }
-
     // Resume one channel's unfinished queue
     resumeChannel(key) {
       const s = this.sessions && this.sessions[key];
@@ -2228,13 +2286,6 @@ this.toast('已经是最后一个' + unit + '了');
       this.studyDone = 0;
       this.goPage('study');
       this.renderStudyCard();
-    }
-
-    // Compat: pick any unfinished channel
-    resumeSession() {
-      const keys = Object.keys(this.sessions || {});
-      if (!keys.length) return;
-      return this.resumeChannel(keys[0]);
     }
 
     async pasteFromClipboard(textareaId) {
@@ -2367,21 +2418,6 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       return 'english-memory-data.json';
     }
 
-    _getAllData() {
-      // Remove gistToken from synced data to prevent GitHub secret scanning auto-revocation
-      const safeSettings = Object.assign({}, this.settings);
-      delete safeSettings.gistToken;
-      return {
-        sentences: this.sentences,
-        words: this.words,
-        grammar: this.grammar,
-        settings: safeSettings,
-        records: this.records,
-        daily: this.daily,
-        syncedAt: new Date().toISOString()
-      };
-    }
-
     // Debounced background sync: many quick actions (e.g. answering cards) coalesce
     // into one upload a few seconds later, avoiding repeated 600KB+ uploads that
     // frequently time out on mobile networks
@@ -2415,7 +2451,7 @@ if (statusEl) statusEl.textContent = silent ? '后台同步中...' : '正在上�
           'em-sentences.json': { content: JSON.stringify(this.sentences) },
           'em-words.json': { content: JSON.stringify(this.words) },
           'em-grammar.json': { content: JSON.stringify(this.grammar) },
-          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, records: this.records, daily: this.daily, syncedAt: new Date().toISOString() }) }
+          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, daily: this.daily, syncedAt: new Date().toISOString() }) }
         }
       };
       // Gist limit is ~1MB per file measured in UTF-8 bytes (Chinese chars = 3 bytes each)
@@ -2494,7 +2530,6 @@ return;
           };
           const meta = parseFile('em-meta.json') || {};
           remote.settings = meta.settings;
-          remote.records = meta.records;
           remote.daily = meta.daily;
         } else {
           const legacy = f[this._gistFileName()];
@@ -2504,7 +2539,6 @@ return;
         if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
 if (remote.words) { this.words = remote.words; save(STORAGE_KEYS.words, this.words); }
         if (remote.grammar) { this.grammar = remote.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
-        if (remote.records) { this.records = remote.records; save(STORAGE_KEYS.records, this.records); }
         if (remote.daily) { this.daily = remote.daily; save(STORAGE_KEYS.daily, this.daily); }
         // Keep local settings for gistId/token but merge other fields
         if (remote.settings) {
