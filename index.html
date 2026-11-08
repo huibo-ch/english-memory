@@ -374,6 +374,7 @@ revenue | ˈrevənjuː | 收入；营收
         <input type="number" id="setting-rev-grammar" min="5" max="500" value="20" onchange="app.saveSettings()">
       </div>
     </div>
+<div style="text-align:center;font-size:11px;color:var(--text-light);margin:4px 0 14px;">版本 <span id="app-build">-</span></div>
 <div class="card">
 <div class="card-title">日期时区</div>
 <div class="setting-row">
@@ -523,8 +524,12 @@ revenue | ˈrevənjuː | 收入；营收
     records: 'em_records',
     daily: 'em_daily',
     session: 'em_session',          // 旧版单会话（仅用于升级时丢弃）
-    sessions: 'em_sessions'         // 按频道保存的未完成会话
-  };
+sessions: 'em_sessions',        // 按频道保存的未完成会话
+build: 'em_build'               // 已运行过的代码版本，升级时用来丢弃旧会话
+};
+
+// 改动预算/复习规则时记得改这个号，避免旧会话里的旧预算继续生效
+const APP_BUILD = '2026-11-07.2';
 
 const DEFAULT_SETTINGS = {
   sentenceLimit: 20,
@@ -620,9 +625,19 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.records = load(STORAGE_KEYS.records, {});
       this.daily = load(STORAGE_KEYS.daily, {});
       this.sessions = load(STORAGE_KEYS.sessions, {});
+      // 代码升级后，旧版本留下的当天会话可能带着旧的重复次数（旧版认识 = 5 次），整体丢弃，
+      // 下次从仪表盘重进通道就会按新版规则重算。
+      const seenBuild = load(STORAGE_KEYS.build, '');
+      if (seenBuild !== APP_BUILD) {
+        this.sessions = {};
+        save(STORAGE_KEYS.sessions, this.sessions);
+        save(STORAGE_KEYS.build, APP_BUILD);
+      }
       // Old single-session format mixed new + review in one queue; the channel model
       // rebuilds queues from scratch, so drop it (item SRS progress is untouched).
       try { localStorage.removeItem(STORAGE_KEYS.session); } catch (e) {}
+      const buildEl = document.getElementById('app-build');
+      if (buildEl) buildEl.textContent = APP_BUILD;
       this.currentPage = 'dashboard';
       this.studyQueue = [];
       this.studyIndex = 0;
