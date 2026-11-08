@@ -879,23 +879,28 @@ save(STORAGE_KEYS.settings, this.settings);
 CURRENT_TZ = this.settings.dayTimezone;
 const trimmed = this.trimQueueToLimits(oldCaps);
 this.clampChannelTotals();
-this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : '设置已保存');
+const topped = this.topUpReviewChannels(oldCaps);
+this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : (topped ? ('设置已保存，已把今天剩下的 ' + topped + ' 个复习条目加进来') : '设置已保存'));
 this.checkDateRoll();
 this.refreshDashboard();
 }
 
-// A lowered cap takes effect immediately for the channel being studied: randomly drop the
-// overflow from the running queue so it fits the new cap. Dropped tasks are left untouched —
-// they stay exactly as if they had never entered today.
+// A lowered cap takes effect immediately — for the channel being studied and for every other
+// channel that already has a session today. Already-graded tasks are kept first, the rest are
+// randomly kept up to the new cap. Dropped tasks are left untouched, so they behave exactly as
+// if they had never entered today (new items fall back into the pool, review items keep their
+// due date and show up again on that day).
 trimQueueToLimits(oldCaps) {
+  return this.trimActiveQueue(oldCaps) + this.trimIdleSessions(oldCaps);
+}
+
+trimActiveQueue(oldCaps) {
   if (!this.channel || !this.studyQueue || !this.studyQueue.length) return 0;
   const type = this.studyType;
   const parts = this.channel.split('|');
   const dir = parts[1] === 'x' ? null : parts[1];
   const isNew = this.studyIsNew;
-  const capKey = type === 'grammar'
-    ? (isNew ? 'newGrammar' : 'revGrammar')
-    : (isNew ? 'new' : 'rev') + (type === 'sentence' ? 'Sentence' : 'Word') + (dir === 'en2zh' ? 'En' : 'Zh');
+  const capKey = this.channelCapKey(type, dir, isNew);
   const cap = this.channelCap(type, dir, isNew);
   const oldCap = oldCaps ? oldCaps[capKey] : null;
   if (oldCap == null || !(cap < oldCap)) return 0;   // not lowered → leave the queue alone
@@ -917,6 +922,47 @@ trimQueueToLimits(oldCaps) {
   this.saveStudySession();
   if (this.currentPage === 'study') this.renderStudyCard();
   return doomed.size;
+}
+
+// Same trimming for the channels that are not on screen right now: their queue lives in
+// em_sessions, so the overflow has to be dropped there and the day counter kept in sync.
+trimIdleSessions(oldCaps) {
+  if (!oldCaps) return 0;
+  let dropped = 0;
+  Object.keys(this.sessions).forEach(key => {
+    if (this.channel && key === this.channel) return;   // 正在学的通道已经由 trimActiveQueue 处理
+    const s = this.sessions[key];
+    if (!s || !s.tasks || !s.tasks.length) return;
+    const parts = key.split('|');
+    const dir = parts[1] === 'x' ? null : parts[1];
+    const isNew = parts[2] === 'new';
+    const cap = this.channelCap(s.type, dir, isNew);
+    const oldCap = oldCaps[this.channelCapKey(s.type, dir, isNew)];
+    if (oldCap == null || !(cap < oldCap)) return;
+    const st = this.channelStat(s.type, dir, isNew);
+    const idx = Math.min(Math.max(0, s.index || 0), s.tasks.length);
+    const pending = s.tasks.slice(idx);
+    const room = Math.max(0, cap - (st.done || 0));
+    const graded = pending.filter(t => (t.seen || 0) > 0);
+    const ungraded = pending.filter(t => !(t.seen || 0));
+    const keepGraded = graded.slice(0, room);
+    const keepUngraded = ungraded.slice().sort(() => Math.random() - 0.5).slice(0, Math.max(0, room - keepGraded.length));
+    const keep = new Set(keepGraded.concat(keepUngraded));
+    if (keep.size === pending.length) return;
+    dropped += pending.length - keep.size;
+    const kept = pending.filter(t => keep.has(t));
+    if (!kept.length) {
+      delete this.sessions[key];
+      st.total = st.done || 0;
+    } else {
+      s.tasks = s.tasks.slice(0, idx).concat(kept);
+      s.index = idx;
+      st.total = (st.done || 0) + kept.length;
+    }
+    save(STORAGE_KEYS.daily, this.daily);
+  });
+  save(STORAGE_KEYS.sessions, this.sessions);
+  return dropped;
 }
 
 // Merge word entries that have identical English + Chinese, since each duplicate
@@ -986,11 +1032,36 @@ this.toast(msg);
       return n;
     }
 
+    // All due items of one review channel, ordered by due date (overdue first)
+    dueCandidates(type, dir) {
+      const today = this.today;
+      const cmp = (a, b) => {
+        const da = a.nextReview || '0000-00-00';
+        const db = b.nextReview || '0000-00-00';
+        if (da !== db) return da < db ? -1 : 1;
+        return (a.stage || 0) - (b.stage || 0);
+      };
+      if (type === 'grammar') {
+        this.grammar.forEach(it => this.migrateGrammarState(it));
+        return this.grammar
+          .filter(it => it.seen && (!it.nextReview || it.nextReview <= today))
+          .sort(cmp)
+          .map(it => ({ it: it, dir: null }));
+      }
+      const candidates = [];
+      this.getItemsByType(type).forEach(it => {
+        this.migrateSrs(it);
+        const s = it.srs[dir];
+        if (s.seen && (!s.nextReview || s.nextReview <= today)) candidates.push({ it: it, dir: dir });
+      });
+      candidates.sort((a, b) => cmp(a.it.srs[a.dir], b.it.srs[b.dir]));
+      return candidates;
+    }
+
     // Due queue of one review channel. The daily cap only truncates the queue —
     // nextReview is never rewritten here, so over-due items keep their date and stay
     // first in line tomorrow instead of being silently pushed back.
     dueForChannel(type, dir) {
-      const today = this.today;
       const st = this.channelStat(type, dir, false);
       // 今天还能进几条：上限余量；若今天进过货但还没背完、且会话已经不在（升级/清缓存），
       // 那些没背完的条目要能重新出队，否则会出现「剩余 N」却永远进不去。
@@ -999,30 +1070,52 @@ this.toast(msg);
       const hasSess = !!(sess && sess.tasks && sess.index < sess.tasks.length);
       const room = Math.max(0, this.channelCap(type, dir, false) - (st.total || 0), hasSess ? 0 : (st.total || 0) - (st.done || 0));
       if (room <= 0) return [];
-      const cmp = (a, b) => {
-        const da = a.nextReview || '0000-00-00';
-        const db = b.nextReview || '0000-00-00';
-        if (da !== db) return da < db ? -1 : 1;
-        return (a.stage || 0) - (b.stage || 0);
-      };
+      return this.dueCandidates(type, dir).slice(0, room);
+    }
 
-      if (type === 'grammar') {
-        this.grammar.forEach(it => this.migrateGrammarState(it));
-        return this.grammar
-          .filter(it => it.seen && (!it.nextReview || it.nextReview <= today))
-          .sort(cmp)
-          .slice(0, room)
-          .map(it => ({ it: it, dir: null }));
-      }
-
-      const candidates = [];
-      this.getItemsByType(type).forEach(it => {
-        this.migrateSrs(it);
-        const s = it.srs[dir];
-        if (s.seen && (!s.nextReview || s.nextReview <= today)) candidates.push({ it: it, dir: dir });
+    // 上调上限后，把今天已经到期但没排进来的复习条目补进该频道的队列，
+    // 不自动跳进学习页 —— 用户回到仪表盘会看到「剩余 N」和「继续」。
+    topUpReviewChannels(oldCaps) {
+      let added = 0;
+      const chans = [];
+      ['word', 'sentence'].forEach(t => ['en2zh', 'zh2en'].forEach(d => chans.push([t, d])));
+      chans.push(['grammar', null]);
+      chans.forEach(c => {
+        const type = c[0], dir = c[1];
+        const key = this.channelKey(type, dir, false);
+        const st = this.daily.ch && this.daily.ch[key];
+        if (!st || !st.total) return;                        // 今天没开始过的通道不自动生成任务
+        const cap = this.channelCap(type, dir, false);
+        const oldCap = oldCaps ? oldCaps[this.channelCapKey(type, dir, false)] : null;
+        if (oldCap == null || !(cap > oldCap)) return;        // 只在上调时补齐
+        const room = cap - (st.total || 0);
+        if (room <= 0) return;
+        const sess = this.sessions[key];
+        const inQueue = new Set(((sess && sess.tasks) || []).map(t => t.id + '|' + (t.dir || '')));
+        if (this.channel === key) this.studyQueue.forEach(t => inQueue.add(t.it.id + '|' + (t.dir || '')));
+        const pick = this.dueCandidates(type, dir).filter(t => !inQueue.has(t.it.id + '|' + (t.dir || ''))).slice(0, room);
+        if (!pick.length) return;
+        if (this.channel === key) {
+          this.studyQueue = this.studyQueue.concat(pick.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0 })));
+          this.saveStudySession();
+          if (this.currentPage === 'study') this.renderStudyCard();
+        } else {
+          const compact = pick.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: false, budget: 0, seen: 0 }));
+          if (sess && sess.tasks) sess.tasks = sess.tasks.concat(compact);
+          else this.sessions[key] = { type: type, dir: dir, isNew: false, date: this.today, index: 0, tasks: compact };
+        }
+        st.total = (st.total || 0) + pick.length;
+        added += pick.length;
       });
-      candidates.sort((a, b) => cmp(a.it.srs[a.dir], b.it.srs[b.dir]));
-      return candidates.slice(0, room);
+      if (added) save(STORAGE_KEYS.sessions, this.sessions);
+      save(STORAGE_KEYS.daily, this.daily);
+      return added;
+    }
+
+    // capKey of one channel, shared by settings trimming / top-up
+    channelCapKey(type, dir, isNew) {
+      if (type === 'grammar') return isNew ? 'newGrammar' : 'revGrammar';
+      return (isNew ? 'new' : 'rev') + (type === 'sentence' ? 'Sentence' : 'Word') + (dir === 'en2zh' ? 'En' : 'Zh');
     }
 
     // Unlearned pool of one new-item channel
@@ -1169,9 +1262,16 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const left = Math.max(0, total - (st.done || 0));
       const finished = total > 0 && left === 0 && !hasSess;
       const dirArg = dir || 'x';
+      const roomLeft = cap - total;
+      const newPoolSize = isNew ? this.newPoolFor(type, dir).length : 0;
       let btn;
       if (hasSess) {
         btn = '<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">继续</button>';
+      } else if (isNew && roomLeft > 0 && newPoolSize > 0) {
+        // 新学：上限还有余量且池子里还有内容，就给一个再选的入口
+        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openNewPicker(\'' + type + '\',\'' + dirArg + '\')">' + (total > 0 ? '再选' : '选新学') + '</button>';
+      } else if (isNew && newPoolSize === 0) {
+        btn = '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">池子已空</span>';
       } else if (finished) {
         btn = '<span style="font-size:12px;color:var(--success);white-space:nowrap;">今日已完</span>';
       } else {
@@ -1836,11 +1936,10 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
       this.settleReview(state, quality);
 
-      // The first grade of the day fixes this task's pass budget: 认识 → 3 passes,
-      // 模糊/忘记 → 15 passes. Every pass is counted, re-appearances included.
-      if (firstPass) {
-        task.budget = quality === 3 ? 3 : 15;
-      }
+      // 每次评分都按当前选项的档位刷新当天预算：记住 = 3 次，模糊/忘记 = 15 次。
+      // 所以背到一半改选记住会立即按 3 次结算（已超过 3 次就当场结束），
+      // 改选忘记/模糊则补到 15 次；到期日仍由当天最后一次评分决定。
+      task.budget = quality === 3 ? 3 : 15;
       task.seen = (task.seen || 0) + 1;
 
       // Daily stats count a task once — on its first pass of the day
