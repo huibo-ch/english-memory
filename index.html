@@ -1791,10 +1791,10 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
       this.settleReview(state, quality);
 
-      // The first grade of the day fixes this task's pass budget: 认识 → 5 passes,
+      // The first grade of the day fixes this task's pass budget: 认识 → 3 passes,
       // 模糊/忘记 → 15 passes. Every pass is counted, re-appearances included.
       if (firstPass) {
-        task.budget = quality === 3 ? 5 : 15;
+        task.budget = quality === 3 ? 3 : 15;
       }
       task.seen = (task.seen || 0) + 1;
 
