@@ -489,11 +489,9 @@ revenue | ˈrevənjuː | 收入；营收
         </div>
       </div>
     </div>
-    <div style="text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-      <button class="btn btn-outline" id="btn-prev" onclick="app.goPrev()">◀ 上一句</button>
-      <button class="btn btn-outline" onclick="app.endStudy()">结束学习</button>
-      <button class="btn btn-outline" id="btn-next" onclick="app.goNext()">下一句 ▶</button>
-    </div>
+<div style="text-align:center;">
+<button class="btn btn-outline" onclick="app.endStudy()">结束学习</button>
+</div>
   </div>
 </div>
 
@@ -1976,8 +1974,6 @@ const item = task.it;
       if (englishText) {
         this.speak(englishText, isSentence ? 1 : 3);
       }
-
-      this.updateNavButtons();
     }
 
 editCurrentCard() {
@@ -2191,34 +2187,6 @@ if (this.studyIndex >= this.studyQueue.length) this.studyIndex = 0;
 this.saveStudySession();
 this.renderStudyCard();
 }
-
-goPrev() {
-if (this.studyIndex > 0) {
-this.studyIndex--;
-this.saveStudySession();
-this.renderStudyCard();
-}
-}
-
-goNext() {
-if (this.studyIndex < this.studyQueue.length - 1) {
-this.studyIndex++;
-this.saveStudySession();
-this.renderStudyCard();
-} else {
-const unit = this.studyType === 'word' ? '单词' : this.studyType === 'grammar' ? '语法' : '句子';
-this.toast('已经是最后一个' + unit + '了');
-}
-}
-
-    updateNavButtons() {
-      const prevBtn = document.getElementById('btn-prev');
-      const nextBtn = document.getElementById('btn-next');
-      if (prevBtn) prevBtn.disabled = this.studyIndex <= 0;
-      if (nextBtn) nextBtn.disabled = this.studyIndex >= this.studyQueue.length - 1;
-      if (prevBtn) prevBtn.style.opacity = prevBtn.disabled ? '0.4' : '1';
-      if (nextBtn) nextBtn.style.opacity = nextBtn.disabled ? '0.4' : '1';
-    }
 
     endStudy() {
       // Keep the unfinished session so the user can resume from the dashboard;
