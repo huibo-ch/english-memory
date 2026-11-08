@@ -886,12 +886,44 @@ this.refreshDashboard();
 }
 
 // A lowered cap takes effect immediately — for the channel being studied and for every other
-// channel that already has a session today. Already-graded tasks are kept first, the rest are
-// randomly kept up to the new cap. Dropped tasks are left untouched, so they behave exactly as
-// if they had never entered today (new items fall back into the pool, review items keep their
-// due date and show up again on that day).
+// channel that already has a session today. 新学通道：不分是否评过分，随机拿走多出来的；
+// 被拿走的条目连痕迹一起抹掉，回到「从来没背过」的状态（重新出现在未背诵池里）。
+// 复习通道：优先保留今天已经评过分的（档位改动不能凭空抹掉），只随机移出还没评分的。
 trimQueueToLimits(oldCaps) {
   return this.trimActiveQueue(oldCaps) + this.trimIdleSessions(oldCaps);
+}
+
+// Pick the overflow to drop. 新学 = 完全随机；复习 = 只从未评分的里面挑。
+pickDoomed(tasks, room, isNew) {
+  if (isNew) {
+    const over = tasks.length - Math.max(0, room);
+    if (over <= 0) return [];
+    return tasks.slice().sort(() => Math.random() - 0.5).slice(0, over);
+  }
+  const graded = tasks.filter(t => (t.seen || 0) > 0);
+  const ungraded = tasks.filter(t => !(t.seen || 0));
+  const allowed = Math.max(0, room - graded.length);
+  if (ungraded.length <= allowed) return [];
+  return ungraded.slice().sort(() => Math.random() - 0.5).slice(0, ungraded.length - allowed);
+}
+
+// 把一条新学任务的学习痕迹抹掉：只重置它自己的那个方向（另一个方向不动），
+// 让它和刚从词库导入的条目一模一样。
+revertTaskTrace(type, id, dir) {
+  const it = this.getItemsByType(type).find(x => x.id === id);
+  if (!it) return;
+  if (dir) {
+    this.migrateSrs(it);
+    it.srs[dir] = this.freshState(false);
+  } else {
+    Object.assign(it, this.freshState(false));
+  }
+}
+
+saveItems(type) {
+  if (type === 'sentence') save(STORAGE_KEYS.sentences, this.sentences);
+  else if (type === 'word') save(STORAGE_KEYS.words, this.words);
+  else save(STORAGE_KEYS.grammar, this.grammar);
 }
 
 trimActiveQueue(oldCaps) {
@@ -904,24 +936,27 @@ trimActiveQueue(oldCaps) {
   const cap = this.channelCap(type, dir, isNew);
   const oldCap = oldCaps ? oldCaps[capKey] : null;
   if (oldCap == null || !(cap < oldCap)) return 0;   // not lowered → leave the queue alone
-  const graded = this.studyQueue.filter(t => (t.seen || 0) > 0).length;
-  const ungraded = this.studyQueue.filter(t => !(t.seen || 0));
-  const allowed = Math.max(0, cap - graded);
-  if (ungraded.length <= allowed) return 0;
-  const doomed = new Set(ungraded.slice().sort(() => Math.random() - 0.5).slice(0, ungraded.length - allowed));
-  this.studyQueue = this.studyQueue.filter(t => !doomed.has(t));
   const st = this.channelStat(type, dir, isNew);
-  st.total = st.done + this.studyQueue.length;
+  const room = Math.max(0, cap - (st.done || 0));
+  const doomed = this.pickDoomed(this.studyQueue, room, isNew);
+  if (!doomed.length) return 0;
+  const doomedSet = new Set(doomed);
+  this.studyQueue = this.studyQueue.filter(t => !doomedSet.has(t));
+  if (isNew) {
+    doomed.forEach(t => this.revertTaskTrace(type, t.it.id, t.dir));
+    this.saveItems(type);
+  }
+  st.total = (st.done || 0) + this.studyQueue.length;
   save(STORAGE_KEYS.daily, this.daily);
   if (!this.studyQueue.length) {
     this.dropChannelSession(this.channel);
     if (this.currentPage === 'study') this.goPage('dashboard');
-    return doomed.size;
+    return doomed.length;
   }
   if (this.studyIndex >= this.studyQueue.length) this.studyIndex = Math.max(0, this.studyQueue.length - 1);
   this.saveStudySession();
   if (this.currentPage === 'study') this.renderStudyCard();
-  return doomed.size;
+  return doomed.length;
 }
 
 // Same trimming for the channels that are not on screen right now: their queue lives in
@@ -929,6 +964,7 @@ trimActiveQueue(oldCaps) {
 trimIdleSessions(oldCaps) {
   if (!oldCaps) return 0;
   let dropped = 0;
+  const touched = new Set();
   Object.keys(this.sessions).forEach(key => {
     if (this.channel && key === this.channel) return;   // 正在学的通道已经由 trimActiveQueue 处理
     const s = this.sessions[key];
@@ -941,27 +977,30 @@ trimIdleSessions(oldCaps) {
     if (oldCap == null || !(cap < oldCap)) return;
     const st = this.channelStat(s.type, dir, isNew);
     const idx = Math.min(Math.max(0, s.index || 0), s.tasks.length);
+    const head = s.tasks.slice(0, idx);
     const pending = s.tasks.slice(idx);
-    const room = Math.max(0, cap - (st.done || 0));
-    const graded = pending.filter(t => (t.seen || 0) > 0);
-    const ungraded = pending.filter(t => !(t.seen || 0));
-    const keepGraded = graded.slice(0, room);
-    const keepUngraded = ungraded.slice().sort(() => Math.random() - 0.5).slice(0, Math.max(0, room - keepGraded.length));
-    const keep = new Set(keepGraded.concat(keepUngraded));
-    if (keep.size === pending.length) return;
-    dropped += pending.length - keep.size;
-    const kept = pending.filter(t => keep.has(t));
+    const room = Math.max(0, cap - (st.done || 0) - head.length);
+    const doomed = this.pickDoomed(pending, room, isNew);
+    if (!doomed.length) return;
+    const doomedSet = new Set(doomed);
+    const kept = pending.filter(t => !doomedSet.has(t));
+    if (isNew) {
+      doomed.forEach(t => this.revertTaskTrace(s.type, t.id, dir));
+      touched.add(s.type);
+    }
+    dropped += doomed.length;
     if (!kept.length) {
       delete this.sessions[key];
       st.total = st.done || 0;
     } else {
-      s.tasks = s.tasks.slice(0, idx).concat(kept);
-      s.index = idx;
-      st.total = (st.done || 0) + kept.length;
+      s.tasks = head.concat(kept);
+      s.index = Math.min(idx, s.tasks.length - 1);
+      st.total = (st.done || 0) + s.tasks.length;
     }
     save(STORAGE_KEYS.daily, this.daily);
   });
   save(STORAGE_KEYS.sessions, this.sessions);
+  touched.forEach(t => this.saveItems(t));
   return dropped;
 }
 
