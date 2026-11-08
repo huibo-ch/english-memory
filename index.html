@@ -529,7 +529,7 @@ build: 'em_build'               // 已运行过的代码版本，升级时用来
 };
 
 // 改动预算/复习规则时记得改这个号，避免旧会话里的旧预算继续生效
-const APP_BUILD = '2026-11-07.2';
+const APP_BUILD = '2026-11-07.3';
 
 const DEFAULT_SETTINGS = {
   sentenceLimit: 20,
@@ -625,12 +625,17 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.records = load(STORAGE_KEYS.records, {});
       this.daily = load(STORAGE_KEYS.daily, {});
       this.sessions = load(STORAGE_KEYS.sessions, {});
-      // 代码升级后，旧版本留下的当天会话可能带着旧的重复次数（旧版认识 = 5 次），整体丢弃，
-      // 下次从仪表盘重进通道就会按新版规则重算。
+      // 代码升级后，旧版本留下的当天会话可能带着旧的重复次数（旧版认识 = 5 次），整体丢弃；
+      // 当天的通道计数也必须归零——否则会出现「剩余 37」但计数所属的任务已经不在任何会话里，
+      // 既排不进队列也永远背不完。词条本身的复习进度（nextReview）不受影响。
       const seenBuild = load(STORAGE_KEYS.build, '');
       if (seenBuild !== APP_BUILD) {
         this.sessions = {};
         save(STORAGE_KEYS.sessions, this.sessions);
+        if (this.daily && this.daily.ch) {
+          this.daily.ch = {};
+          save(STORAGE_KEYS.daily, this.daily);
+        }
         save(STORAGE_KEYS.build, APP_BUILD);
       }
       // Old single-session format mixed new + review in one queue; the channel model
@@ -648,6 +653,7 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.studyIsNew = false;
       this.today = nowDate();
       this.ensureDaily();
+      this.clampChannelTotals();
       this.initNav();
       this.applySettingsUI();
       this.refreshDashboard();
@@ -767,6 +773,24 @@ this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrec
       save(STORAGE_KEYS.daily, this.daily);
     }
 
+    // 上限调小以后，今天已经进过货的通道可能 total > 上限，会让「剩余 / 总任务 / 上限」
+    // 出现 X ≤ Y ≤ Z 不成立、且上限余量为负导致点了「开始」也进不去。这里统一把 total 压到上限内。
+    clampChannelTotals() {
+      const chans = [];
+      ['word', 'sentence'].forEach(t => ['en2zh', 'zh2en'].forEach(d => { chans.push([t, d, true], [t, d, false]); }));
+      chans.push(['grammar', null, true], ['grammar', null, false]);
+      let changed = false;
+      chans.forEach(c => {
+        const st = this.daily.ch && this.daily.ch[this.channelKey(c[0], c[1], c[2])];
+        if (!st) return;
+        const cap = this.channelCap(c[0], c[1], c[2]);
+        const total = Math.max(st.done || 0, Math.min(st.total || 0, cap));
+        const done = Math.min(st.done || 0, total);
+        if (total !== (st.total || 0) || done !== (st.done || 0)) { st.total = total; st.done = done; changed = true; }
+      });
+      if (changed) save(STORAGE_KEYS.daily, this.daily);
+    }
+
     // Old limits (one new-item cap per module, one review cap per direction) → 10 channel caps
     migrateChannelSettings() {
       const s = this.settings;
@@ -854,6 +878,7 @@ this.settings.gistToken = document.getElementById('setting-gist-token').value.tr
 save(STORAGE_KEYS.settings, this.settings);
 CURRENT_TZ = this.settings.dayTimezone;
 const trimmed = this.trimQueueToLimits(oldCaps);
+this.clampChannelTotals();
 this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : '设置已保存');
 this.checkDateRoll();
 this.refreshDashboard();
@@ -967,7 +992,12 @@ this.toast(msg);
     dueForChannel(type, dir) {
       const today = this.today;
       const st = this.channelStat(type, dir, false);
-      const room = Math.max(0, this.channelCap(type, dir, false) - st.total);
+      // 今天还能进几条：上限余量；若今天进过货但还没背完、且会话已经不在（升级/清缓存），
+      // 那些没背完的条目要能重新出队，否则会出现「剩余 N」却永远进不去。
+      const key = this.channelKey(type, dir, false);
+      const sess = this.sessions[key];
+      const hasSess = !!(sess && sess.tasks && sess.index < sess.tasks.length);
+      const room = Math.max(0, this.channelCap(type, dir, false) - (st.total || 0), hasSess ? 0 : (st.total || 0) - (st.done || 0));
       if (room <= 0) return [];
       const cmp = (a, b) => {
         const da = a.nextReview || '0000-00-00';
