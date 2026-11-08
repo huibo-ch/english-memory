@@ -1172,11 +1172,11 @@ this.toast(msg);
         const pick = this.dueCandidates(type, dir).filter(t => !inQueue.has(t.it.id + '|' + (t.dir || ''))).slice(0, room);
         if (!pick.length) return;
         if (this.channel === key) {
-          this.studyQueue = this.studyQueue.concat(pick.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0 })));
+          this.studyQueue = this.studyQueue.concat(pick.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0, pass: 0, grade: 0 })));
           this.saveStudySession();
           if (this.currentPage === 'study') this.renderStudyCard();
         } else {
-          const compact = pick.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: false, budget: 0, seen: 0 }));
+          const compact = pick.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: false, budget: 0, seen: 0, pass: 0, grade: 0 }));
           if (sess && sess.tasks) sess.tasks = sess.tasks.concat(compact);
           else this.sessions[key] = { type: type, dir: dir, isNew: false, date: this.today, index: 0, tasks: compact };
         }
@@ -1417,7 +1417,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         if (this.reviewBacklog(type, dir) > 0) return this.toast('这个频道的今日上限已用完，剩下的明天继续');
         return this.toast('这个频道今天没有到期内容');
       }
-      this.beginSession(type, dir, false, due.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0 })));
+      this.beginSession(type, dir, false, due.map(t => ({ it: t.it, dir: t.dir || null, isNew: false, budget: 0, seen: 0, pass: 0, grade: 0 })));
     }
 
     // 一次会话只含一个频道的任务，新学与复习不再混排
@@ -1889,7 +1889,7 @@ const items = this.getItemsByType(type);
 const queue = newIds.map(id => items.find(x => x.id === id)).filter(Boolean)
 .map(it => {
 if (type !== 'grammar') this.migrateSrs(it);
-return { it: it, dir: dir || null, isNew: true, budget: 0, seen: 0 };
+        return { it: it, dir: dir || null, isNew: true, budget: 0, seen: 0, pass: 0, grade: 0 };
 });
 if (!queue.length) return;
 this.beginSession(type, dir, true, queue);
@@ -1921,9 +1921,14 @@ const item = task.it;
       if (badge) badge.style.display = (task.seen || 0) > 0 ? 'inline-block' : 'none';
       const cardCount = document.getElementById('study-card-count');
       if (cardCount) {
-        if (task.budget) {
-          const left = Math.max(0, task.budget - (task.seen || 0));
-          cardCount.textContent = '今天共 ' + task.budget + ' 次 · 剩 ' + left + ' 次';
+        const target = task.budget || 0;
+        if (target) {
+          // 本轮还要再背几次；档位名跟卡片上的按钮一致（忘记/模糊/认识）
+          const left = Math.max(0, target - (task.pass || 0));
+          const gname = task.grade === 3 ? '认识' : task.grade === 2 ? '模糊' : task.grade === 1 ? '忘记' : '';
+          cardCount.textContent = left > 0
+            ? (gname ? '按' + gname + '，还要再背 ' + left + ' 次' : '还要再背 ' + left + ' 次')
+            : '本轮次数已背完，再评一次即可';
         } else {
           cardCount.textContent = '今天第 1 次';
         }
@@ -2116,10 +2121,14 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
       this.settleReview(state, quality);
 
-      // 每次评分都按当前选项的档位刷新当天预算：记住 = 3 次，模糊/忘记 = 15 次。
-      // 所以背到一半改选记住会立即按 3 次结算（已超过 3 次就当场结束），
-      // 改选忘记/模糊则补到 15 次；到期日仍由当天最后一次评分决定。
-      task.budget = quality === 3 ? 3 : 15;
+      // 每次评分按刚点的档位重新起算「还要再背几次」：认识 3 次，模糊/忘记 15 次。
+      // 只有「换档位」才把本轮计数归零（本次评分不占新额度，等于从头再来）；
+      // 一直点同一档则继续累积，不会永远出不了队。到期日仍按当天最后一次评分算。
+      const target = quality === 3 ? 3 : 15;
+      const switched = (task.budget || 0) !== target;
+      task.budget = target;
+      task.pass = switched ? 0 : (task.pass || 0) + 1;
+      task.grade = quality;
       task.seen = (task.seen || 0) + 1;
 
       // Daily stats count a task once — on its first pass of the day
@@ -2166,7 +2175,7 @@ this.scheduleSync();
 // finished its whole budget counts as written off for its channel.
 const cur = this.studyIndex;
 this.studyQueue.splice(cur, 1);
-if ((task.seen || 0) < (task.budget || 1)) {
+      if ((task.pass || 0) < (task.budget || 1)) {
   this.studyQueue.push(task);
 } else {
   this.channelStat(this.studyType, task.dir || null, this.studyIsNew).done++;
@@ -2232,7 +2241,7 @@ this.toast('已经是最后一个' + unit + '了');
         isNew: !!this.studyIsNew,
         date: this.today,
         index: this.studyIndex,
-        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0 }))
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0, pass: t.pass || 0, grade: t.grade || 0 }))
       };
       save(STORAGE_KEYS.sessions, this.sessions);
     }
@@ -2273,7 +2282,9 @@ this.toast('已经是最后一个' + unit + '了');
         queue.push({
           it: it, dir: t.dir || null, isNew: !!t.isNew,
           budget: t.budget || 0,
-          seen: t.seen || 0
+          seen: t.seen || 0,
+          pass: t.pass || 0,
+          grade: t.grade || 0
         });
       });
       if (!queue.length) { this.dropChannelSession(key); this.refreshDashboard(); return; }
