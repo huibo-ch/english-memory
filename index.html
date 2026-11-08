@@ -542,7 +542,12 @@ const DEFAULT_SETTINGS = {
   reviewLimit: 30,
   dayTimezone: 'Asia/Qatar',
   gistId: '',
-  gistToken: ''
+  gistToken: '',
+  // 10 个通道上限必须写全：resetData 用 Object.assign({}, DEFAULT_SETTINGS) 重建设置，
+  // 缺键会让设置页输入框变成 undefined、再保存时被兜底成默认值（= 偷偷改掉用户的上限）
+  newWordEn: 20, newWordZh: 20, revWordEn: 30, revWordZh: 30,
+  newSentenceEn: 20, newSentenceZh: 20, revSentenceEn: 30, revSentenceZh: 30,
+  newGrammar: 10, revGrammar: 20
 };
 
 // Timezone used for all "today" calculations (selectable in settings)
@@ -727,6 +732,14 @@ if (this.currentPage === 'study') this.goPage('dashboard');
 if (!this.daily.date || this.daily.date !== this.today) {
 this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrect: 0, grammarNew: 0, grammarDone: 0, grammarCorrect: 0, wordNew: 0, wordDone: 0, wordCorrect: 0, en2zhDone: 0, en2zhNew: 0, zh2enDone: 0, zh2enNew: 0, senEnNew: 0, senZhNew: 0, wordEnNew: 0, wordZhNew: 0, senPicked: 0, wordPicked: 0, gramPicked: 0, ch: {} };
         save(STORAGE_KEYS.daily, this.daily);
+        // 跨天必须连会话一起作废：daily 归零但昨天排好的队列还在时，
+        // 仪表盘会出现「剩余 0 / 总任务 0 · 继续」，点进去是空白
+        if (this.sessions && Object.keys(this.sessions).length) {
+          this.sessions = {};
+          save(STORAGE_KEYS.sessions, this.sessions);
+          this.channel = null;
+          this.studyQueue = [];
+        }
       }
       if (!this.daily.ch) this.daily.ch = {};
     }
@@ -854,7 +867,7 @@ if (page === 'grammar') this.renderGrammarList();
       set('setting-gist-token', this.settings.gistToken || '');
     }
 
-    saveSettings() {
+    saveSettings(silent) {
       const CAP_IDS = {
         newWordEn: 'setting-new-word-en', newWordZh: 'setting-new-word-zh',
         revWordEn: 'setting-rev-word-en', revWordZh: 'setting-rev-word-zh',
@@ -864,11 +877,17 @@ if (page === 'grammar') this.renderGrammarList();
       };
       const oldCaps = {};
       Object.keys(CAP_IDS).forEach(k => { oldCaps[k] = this.settings[k]; });
+      const before = JSON.stringify(this.settings);
+      const bad = [];
       Object.keys(CAP_IDS).forEach(k => {
         const el = document.getElementById(CAP_IDS[k]);
         if (!el) return;
         const v = parseInt(el.value, 10);
-        this.settings[k] = (v > 0 ? v : (k.indexOf('new') === 0 ? 10 : 30));
+        if (v > 0) { this.settings[k] = v; return; }
+        // 0 / 空 / 乱填：保留原值并向用户说明，不再静默替换成默认值（那等于偷偷改设置）
+        const prev = Number(oldCaps[k]);
+        this.settings[k] = (isFinite(prev) && prev > 0) ? prev : DEFAULT_SETTINGS[k];
+        bad.push(k);
       });
 this.settings.voiceLang = document.getElementById('setting-voice-lang').value;
 this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
@@ -877,13 +896,21 @@ this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
 this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
 save(STORAGE_KEYS.settings, this.settings);
 CURRENT_TZ = this.settings.dayTimezone;
-const trimmed = this.trimQueueToLimits(oldCaps);
+// 只有上限真的变了才裁剪/补齐队列；后台静默保存（同步前顺手存一次输入框）不该动队列
+const changed = JSON.stringify(this.settings) !== before;
+const trimmed = changed ? this.trimQueueToLimits(oldCaps) : 0;
 this.clampChannelTotals();
-const topped = this.topUpReviewChannels(oldCaps);
-this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : (topped ? ('设置已保存，已把今天剩下的 ' + topped + ' 个复习条目加进来') : '设置已保存'));
+const topped = changed ? this.topUpReviewChannels(oldCaps) : 0;
 this.checkDateRoll();
 this.refreshDashboard();
+if (bad.length) {
+  this.applySettingsUI();   // 把输入框恢复成实际的（原）值
+  if (!silent) this.toast('上限至少要填 1，已保留原来的值');
+  return;
 }
+if (silent) return;
+this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : (topped ? ('设置已保存，已把今天剩下的 ' + topped + ' 个复习条目加进来') : '设置已保存'));
+    }
 
 // A lowered cap takes effect immediately — for the channel being studied and for every other
 // channel that already has a session today. 新学通道：不分是否评过分，随机拿走多出来的；
@@ -1104,9 +1131,7 @@ this.toast(msg);
       const st = this.channelStat(type, dir, false);
       // 今天还能进几条：上限余量；若今天进过货但还没背完、且会话已经不在（升级/清缓存），
       // 那些没背完的条目要能重新出队，否则会出现「剩余 N」却永远进不去。
-      const key = this.channelKey(type, dir, false);
-      const sess = this.sessions[key];
-      const hasSess = !!(sess && sess.tasks && sess.index < sess.tasks.length);
+      const hasSess = !!this.liveSession(type, dir, false);
       const room = Math.max(0, this.channelCap(type, dir, false) - (st.total || 0), hasSess ? 0 : (st.total || 0) - (st.done || 0));
       if (room <= 0) return [];
       return this.dueCandidates(type, dir).slice(0, room);
@@ -1288,39 +1313,66 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       });
     }
 
+    // 今天仍然有效的会话（昨天的会话不算）
+    liveSession(type, dir, isNew) {
+      const s = this.sessions && this.sessions[this.channelKey(type, dir, isNew)];
+      if (!s || !s.tasks || !s.tasks.length) return null;
+      if (s.date !== this.today) return null;
+      return s;
+    }
+
+    // 这个频道此刻真正还能背几条 —— 显示的数字必须等于点进去会看到的卡片数
+    // ①有进行中会话：会话里还没背完的条数
+    // ②新学没有会话：今天选了 total 个、背完 done 个 → 还欠 total-done 个（点「再选」把它们重新勾进来）
+    // ③复习没有会话：真正到期、且在上限余量内的条数
+    channelRemaining(type, dir, isNew) {
+      const sess = this.liveSession(type, dir, isNew);
+      if (sess) return sess.tasks.length;
+      const st = this.channelStat(type, dir, isNew);
+      if (isNew) return Math.max(0, (st.total || 0) - (st.done || 0));
+      return this.dueForChannel(type, dir).length;
+    }
+
     // 一个频道一行：剩余 X / 总任务 Y / 上限 Z
     channelRowHtml(type, dir, isNew) {
-      const key = this.channelKey(type, dir, isNew);
       const st = this.channelStat(type, dir, isNew);
-      const cap = this.channelCap(type, dir, isNew);
-      const sess = this.sessions[key];
-      const hasSess = !!(sess && sess.tasks && sess.index < sess.tasks.length);
-      // 未开始前先预览“今天到期多少”：成为总任务 Y 的待定值
-      let total = st.total || 0;
-      if (!isNew && !hasSess && !total) total = Math.min(this.reviewBacklog(type, dir), cap);
-      const left = Math.max(0, total - (st.done || 0));
-      const finished = total > 0 && left === 0 && !hasSess;
+      const done = st.done || 0;
+      const capSetting = this.channelCap(type, dir, isNew);
+      const hasSess = !!this.liveSession(type, dir, isNew);
+      const left = this.channelRemaining(type, dir, isNew);
+      // 总任务 = 今天已进入的条数；还没开始时按「现在点进去会进来几条」预览
+      const total = Math.max(st.total || 0, done + left);
+      // 上限显示口径：今天已经背了 6 条却把上限调到 4 时，上限显示 6 —— 已背的事实压不下去，
+      // 但要额外提示「已超新上限」，否则三个数字会自相矛盾（总任务 > 上限）
+      const cap = Math.max(capSetting, done, total);
+      const over = done > capSetting ? done - capSetting : 0;
       const dirArg = dir || 'x';
-      const roomLeft = cap - total;
+      const roomLeft = Math.max(0, capSetting - Math.max(st.total || 0, done));
       const newPoolSize = isNew ? this.newPoolFor(type, dir).length : 0;
+      const finished = done > 0 && left === 0 && !hasSess;
       let btn;
       if (hasSess) {
         btn = '<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">继续</button>';
-      } else if (isNew && roomLeft > 0 && newPoolSize > 0) {
-        // 新学：上限还有余量且池子里还有内容，就给一个再选的入口
-        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openNewPicker(\'' + type + '\',\'' + dirArg + '\')">' + (total > 0 ? '再选' : '选新学') + '</button>';
       } else if (isNew && newPoolSize === 0) {
         btn = '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">池子已空</span>';
-      } else if (finished) {
+      } else if (isNew && roomLeft > 0) {
+        // 新学：上限还有余量且池子里还有内容，就给一个再选的入口
+        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openNewPicker(\'' + type + '\',\'' + dirArg + '\')">' + (done > 0 ? '再选' : '选新学') + '</button>';
+      } else if (left > 0) {
+        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">开始</button>';
+      } else if (finished || isNew) {
         btn = '<span style="font-size:12px;color:var(--success);white-space:nowrap;">今日已完</span>';
       } else {
-        btn = '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px;white-space:nowrap;" onclick="app.openChannel(\'' + type + '\',\'' + dirArg + '\',' + isNew + ')">' + (isNew ? '选新学' : '开始') + '</button>';
+        btn = '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">无到期</span>';
       }
+      const overHint = over > 0
+        ? '<span style="font-size:11px;color:#e17055;white-space:nowrap;">（今天已背 ' + done + '，超新上限 ' + over + ' 条）</span>'
+        : '';
       return '<div style="display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px solid #f2efe6;">' +
         '<span style="font-size:13px;color:' + (finished ? 'var(--text-light)' : 'var(--text)') + ';flex:1;min-width:0;">' + this.channelName(type, dir, isNew) + '</span>' +
         '<span style="font-size:12px;color:var(--text-light);white-space:nowrap;">剩余 ' +
           '<b style="font-size:13px;color:' + (finished ? 'var(--text-light)' : 'var(--primary)') + ';">' + left + '</b>' +
-          ' / 总任务 ' + total + ' / 上限 ' + cap + '</span>' +
+          ' / 总任务 ' + total + ' / 上限 ' + cap + overHint + '</span>' +
         btn + '</div>';
     }
 
@@ -1341,8 +1393,9 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
     openChannel(type, dir, isNew) {
       const d = dir === 'x' || !dir ? null : dir;
       const key = this.channelKey(type, d, isNew);
-      const sess = this.sessions[key];
-      if (sess && sess.tasks && sess.index < sess.tasks.length) return this.resumeChannel(key);
+      if (this.sessions[key] && !this.liveSession(type, d, isNew)) this.dropChannelSession(key);  // 昨天的会话直接作废
+      const sess = this.liveSession(type, d, isNew);
+      if (sess) return this.resumeChannel(key);
       return isNew ? this.openNewPicker(type, d) : this.startReviewChannel(type, d);
     }
 
@@ -1494,6 +1547,8 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 
     renderWordList() {
       document.getElementById('word-count').textContent = this.words.length;
+      const wStats = document.getElementById('word-pool-stats');
+      if (wStats) wStats.innerHTML = this.poolStatsHtml('word');
       const el = document.getElementById('word-list');
       if (!this.words.length) {
         el.innerHTML = '<div class="empty-state"><div class="emoji">🔤</div>还没有单词，去上方添加吧</div>';
@@ -1547,6 +1602,8 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 
     renderSentenceList() {
       document.getElementById('sentence-count').textContent = this.sentences.length;
+      const sStats = document.getElementById('sentence-pool-stats');
+      if (sStats) sStats.innerHTML = this.poolStatsHtml('sentence');
       const el = document.getElementById('sentence-list');
       if (!this.sentences.length) {
         el.innerHTML = '<div class="empty-state"><div class="emoji">📝</div>还没有句子，去上方添加吧</div>';
@@ -1570,6 +1627,8 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
 
     renderGrammarList() {
       document.getElementById('grammar-count').textContent = this.grammar.length;
+      const gStats = document.getElementById('grammar-pool-stats');
+      if (gStats) gStats.innerHTML = this.poolStatsHtml('grammar');
       const el = document.getElementById('grammar-list');
       if (!this.grammar.length) {
         el.innerHTML = '<div class="empty-state"><div class="emoji">📘</div>还没有语法，去上方添加吧</div>';
@@ -1921,7 +1980,13 @@ this.toast('已删除并同步云端');
 }
 
     escapeAttr(s) {
-      return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+      // 这些字符串会进 onclick="app.speak('...')"：反斜杠/引号/换行都必须处理，
+      // 否则释义里带一个 \ 或换行就会让发音按钮变成死链
+      return String(s == null ? '' : s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&#34;')
+        .replace(/[\r\n]+/g, ' ');
     }
 
 speak(text, times) {
@@ -2056,7 +2121,8 @@ this.studyIndex++;
 this.saveStudySession();
 this.renderStudyCard();
 } else {
-this.toast('已经是最后一句了');
+const unit = this.studyType === 'word' ? '单词' : this.studyType === 'grammar' ? '语法' : '句子';
+this.toast('已经是最后一个' + unit + '了');
 }
 }
 
@@ -2128,8 +2194,14 @@ this.toast('已经是最后一句了');
     resumeChannel(key) {
       const s = this.sessions && this.sessions[key];
       if (!s || !s.tasks || !s.tasks.length || s.index >= s.tasks.length) { this.dropChannelSession(key); return; }
+      // 昨天的队列不再续用：今天按今天的到期/池子重新开始，避免出现「继续」进去是空白
+      if (s.date !== this.today) {
+        const t = s.type, d = s.dir || null, isNew = !!s.isNew;
+        this.dropChannelSession(key);
+        this.refreshDashboard();
+        return isNew ? this.openNewPicker(t, d) : this.startReviewChannel(t, d);
+      }
       const all = [...this.sentences, ...this.words, ...this.grammar];
-      const sameDay = s.date === this.today;
       const queue = [];
       const seen = new Set();
       // 从当前卡片开始，前面的待背任务接到后面，避免恢复时丢任务
@@ -2142,8 +2214,8 @@ this.toast('已经是最后一句了');
         seen.add(uniq);
         queue.push({
           it: it, dir: t.dir || null, isNew: !!t.isNew,
-          budget: sameDay ? (t.budget || 0) : 0,
-          seen: sameDay ? (t.seen || 0) : 0
+          budget: t.budget || 0,
+          seen: t.seen || 0
         });
       });
       if (!queue.length) { this.dropChannelSession(key); this.refreshDashboard(); return; }
@@ -2268,6 +2340,10 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       if (!confirm('确定清空所有数据吗？此操作不可恢复！建议先导出备份。')) return;
       this.sentences = []; this.words = []; this.grammar = []; this.records = {}; this.daily = { date: this.today };
       this.settings = Object.assign({}, DEFAULT_SETTINGS);
+      this.sessions = {};
+      this.channel = null;
+      this.studyQueue = [];
+      this.studyIndex = 0;
       Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
       save(STORAGE_KEYS.settings, this.settings);
       this.applySettingsUI();
@@ -2318,7 +2394,7 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
     }
 
     async syncToGist(silent) {
-this.saveSettings(); // ensure latest input values are saved
+this.saveSettings(true); // ensure latest input values are saved (no toast: this runs in the background)
 const statusEl = document.getElementById('gist-status');
 if (!this.settings.gistToken) {
 if (!silent && statusEl) statusEl.textContent = '请先填写 GitHub Token';
@@ -2385,7 +2461,7 @@ return;
     }
 
     async syncFromGist(silent) {
-      this.saveSettings(); // ensure latest input values are saved
+      this.saveSettings(true); // ensure latest input values are saved (no toast)
       const statusEl = document.getElementById('gist-status');
       if (!this.settings.gistId || !this.settings.gistToken) {
         if (!silent && statusEl) statusEl.textContent = '请先填写 Gist ID 和 Token';
