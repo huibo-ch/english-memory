@@ -79,6 +79,31 @@
       user-select: none; cursor: pointer;
     }
     .study-answer { position: relative; }
+    /* 语法正文是「文档」形态：左对齐、顶部起排，不能像单词那样居中折行 */
+    .study-answer.doc {
+      display: block; text-align: left; font-size: 16px; color: var(--text);
+      line-height: 1.75;
+    }
+    .study-answer.doc.hidden { color: transparent; }
+    /* 语法各行自带颜色/底色，靠透明字色藏不住，隐藏时把子块一起藏起来（布局不变，仍可点击显示） */
+    .study-answer.doc.hidden > * { visibility: hidden; }
+    .grammar-body { font-size: 15px; line-height: 1.75; color: var(--text); }
+    .grammar-title { font-weight: 700; font-size: 17px; color: var(--text); margin-bottom: 4px; }
+    .grammar-line { color: var(--text); }
+    .grammar-ex {
+      margin: 4px 0 4px 2px; padding: 2px 0 2px 10px;
+      border-left: 3px solid #cfe3d5; color: #6b7a72; font-size: 14px;
+      font-style: italic;
+    }
+    .grammar-note {
+      display: block; margin: 6px 0; padding: 4px 10px;
+      background: #fdf7e3; border-radius: 6px; color: #8a6d1f; font-size: 14px;
+    }
+    .grammar-li { padding-left: 14px; color: var(--text); }
+    .grammar-tag {
+      display: inline-block; margin-left: 6px; padding: 1px 6px;
+      background: #eef1f4; border-radius: 4px; color: #95a5a6;
+    }
     .btn {
       padding: 12px 24px; border: none; border-radius: 10px;
       font-size: 15px; cursor: pointer; font-weight: 500;
@@ -271,8 +296,8 @@ revenue | ˈrevənjuː | 收入；营收
   <div id="page-grammar" style="display:none;">
     <div class="card">
       <div class="card-title">批量添加语法</div>
-      <div class="upload-hint">每条语法用 === 分隔。空行不作为分隔符。</div>
-      <textarea class="upload-box" id="grammar-input" placeholder="一般现在时表示经常性、习惯性的动作或状态。&#10;结构：主语 + 动词原形/第三人称单数 + 其他。&#10;===&#10;现在进行时表示此时此刻正在进行的动作。&#10;结构：主语 + am/is/are + doing + 其他。&#10;..."></textarea>
+      <div class="upload-hint">每条语法用 === 分隔。空行不作为分隔符，但会当段落保留。<br>想自己定卡片正面就在块内写一行 <b>提示：xxx</b>；不写就用正文第一行。<br>排版小技巧：第一行当标题；“例：”开头的行显示为例句，“注意：/对比：/区别：”行显示为提示块，“- ”或“1. ”开头的行显示为列表。</div>
+      <textarea class="upload-box" id="grammar-input" placeholder="提示：现在完成时的构成&#10;现在完成时 = have/has + 过去分词&#10;表示过去发生的动作对现在造成的影响。&#10;例：I have finished my homework.&#10;注意：不与 yesterday、last week 等明确过去时间连用。&#10;===&#10;现在进行时表示此时此刻正在进行的动作。&#10;结构：主语 + am/is/are + doing + 其他。&#10;..."></textarea>
       <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="app.importGrammar()">导入</button>
         <button class="btn btn-outline" onclick="app.pasteFromClipboard('grammar-input')">📋 从剪贴板粘贴</button>
@@ -1493,12 +1518,31 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const batchSeen = new Set();
       const rows = [], dup = [];
       blocks.forEach(block => {
-        const text = block.split('\n').map(l => l.trim()).filter(Boolean).join('\n');
-        if (!text) return;
+        // 保留行结构（空行压成一个、去掉块首块尾空行），这样卡片上能分出段落；
+        // 顺手把「提示：xxx」那一行抽出来当卡片正面。
+        const lines = block.split(/\r?\n/).map(l => l.trim());
+        let prompt = '';
+        const body = [];
+        let gap = false;
+        lines.forEach(l => {
+          if (!l) { gap = true; return; }
+          const hint = l.match(/^提示[：:]\s*(.+)$/);
+          if (hint && !prompt) { prompt = hint[1].trim(); gap = false; return; }
+          if (gap && body.length) body.push('');
+          gap = false;
+          body.push(l);
+        });
+        let text = body.join('\n');
+        if (!text) {
+          if (!prompt) return;
+          // 整块只有一行「提示：」，没有正文时别把内容丢了
+          text = prompt;
+          prompt = '';
+        }
         const key = norm(text);
-        if (existing.has(key) || batchSeen.has(key)) { dup.push({ en: text }); return; }
+        if (existing.has(key) || batchSeen.has(key)) { dup.push({ en: text, prompt: prompt }); return; }
         batchSeen.add(key);
-        rows.push({ en: text });
+        rows.push({ en: text, prompt: prompt });
       });
       return { rows: rows, dup: dup, lines: blocks.length };
     }
@@ -1511,7 +1555,11 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const shown = parsed.rows.slice(0, 5).map((r, i) => {
         const no = '<span style="color:#b2bec3;">' + (i + 1) + '.</span> ';
         if (kind === 'grammar') {
-          return '<div style="padding:7px 0;border-bottom:1px solid #f2efe6;font-size:13px;white-space:pre-wrap;">' + no + this.escape(r.en) + '</div>';
+          const face = r.prompt || String(r.en || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean)[0] || '';
+          return '<div style="padding:7px 0;border-bottom:1px solid #f2efe6;font-size:13px;">' + no +
+            '<div style="color:#b2bec3;font-size:12px;">卡片正面：' + this.escHtml(face) + (r.prompt ? '' : '（正文第一行）') + '</div>' +
+            '<div class="grammar-body" style="margin-top:2px;">' + this.grammarBodyHtml(r.en) + '</div>' +
+          '</div>';
         }
         const missing = !r.zh || !/[\u4e00-\u9fa5]/.test(r.zh);
         return '<div style="padding:7px 0;border-bottom:1px solid #f2efe6;font-size:13px;">' + no +
@@ -1554,7 +1602,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         this.renderSentenceList();
       } else {
         parsed.rows.forEach(r => this.grammar.push({
-          id: uuid(), rule: r.en, createdAt: this.today,
+          id: uuid(), rule: r.en, prompt: r.prompt || '', createdAt: this.today,
           stage: 0, seen: false, gradedOn: null, nextReview: null
         }));
         save(STORAGE_KEYS.grammar, this.grammar);
@@ -1724,24 +1772,81 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         el.innerHTML = '<div class="empty-state"><div class="emoji">📘</div>还没有语法，去上方添加吧</div>';
         return;
       }
-      el.innerHTML = this.grammar.map(g => `
+      el.innerHTML = this.grammar.map(g => {
+        const bodyLines = String(g.rule || '').split(/\r?\n/).filter(x => x.trim()).length;
+        const noHint = !g.prompt && bodyLines <= 1;
+        return `
         <div class="list-item">
           <div class="content">
-            <div style="white-space:pre-wrap;">${this.escape(g.rule)}</div>
-            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">${this.taskMeta(g, 'grammar')}</div>
+            <div class="grammar-body">${this.grammarBodyHtml(g.rule)}</div>
+            <div style="font-size:12px;color:#b2bec3;margin-top:4px;">
+              ${this.taskMeta(g, 'grammar')}${noHint ? '<span class="grammar-tag">无提示（正面就是这行）</span>' : ''}
+            </div>
           </div>
           <div class="actions">
             <button class="icon-btn" onclick="app.editGrammar('${g.id}')">✏️</button>
             <button class="icon-btn" onclick="app.deleteGrammar('${g.id}')">🗑️</button>
           </div>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
     }
 
     escape(t) {
       const div = document.createElement('div');
       div.textContent = t;
       return div.innerHTML;
+    }
+
+    // 纯字符串转义（不依赖 DOM，便于测试和拼 innerHTML）
+    escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // 卡片正面：优先用导入时写的「提示：」，否则拿正文第一行
+    grammarFace(g) {
+      if (g && g.prompt) return g.prompt;
+      const first = String((g && g.rule) || '')
+        .split(/\r?\n/)
+        .map(x => x.trim())
+        .filter(Boolean)[0];
+      return first || '(未填写提示)';
+    }
+
+    // 语法正文按行排版：第一行加粗当标题，例：行缩进成例句，注意：行做成小标签，
+    // - / 1. 开头缩进成列表，空行留成段间距。返回 HTML（内容已转义）。
+    grammarBodyHtml(text) {
+      const lines = String(text == null ? '' : text).split(/\r?\n/);
+      let titled = false;
+      const out = [];
+      lines.forEach(raw => {
+        const line = raw.trim();
+        if (!line) {
+          if (titled && out.length && out[out.length - 1] !== '<div style="height:8px;"></div>') {
+            out.push('<div style="height:8px;"></div>');
+          }
+          return;
+        }
+        const safe = this.escHtml(line);
+        if (!titled) {
+          titled = true;
+          out.push('<div class="grammar-title">' + safe + '</div>');
+          return;
+        }
+        if (/^(例|例句|e\.g\.)/i.test(line)) {
+          out.push('<div class="grammar-ex">' + safe + '</div>');
+        } else if (/^(注意|对比|区别|辨析|提示)[：:]/.test(line)) {
+          out.push('<div class="grammar-note">' + safe + '</div>');
+        } else if (/^([-•·*]|\d+[.、)])\s*/.test(line)) {
+          out.push('<div class="grammar-li">' + safe + '</div>');
+        } else {
+          out.push('<div class="grammar-line">' + safe + '</div>');
+        }
+      });
+      return out.join('');
     }
 
     deleteSentence(id) {
@@ -1785,8 +1890,12 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       const g = this.grammar.find(x => x.id === id);
       if (!g) return;
       this.openModal('编辑语法', `
+        <div style="margin-bottom:6px;">卡片正面（可留空，留空就用正文第一行）</div>
+        <input id="edit-prompt" value="${this.escapeAttr(g.prompt || '')}" placeholder="例：现在完成时的构成" style="width:100%;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
+        <div style="margin-bottom:6px;">正文（第一行当标题，例：/注意：/ - 开头的行会自动排版）</div>
         <textarea id="edit-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(g.rule)}</textarea>
       `, () => {
+        g.prompt = (document.getElementById('edit-prompt').value || '').trim();
         g.rule = document.getElementById('edit-rule').value.trim();
         save(STORAGE_KEYS.grammar, this.grammar);
         this.renderGrammarList();
@@ -1845,7 +1954,7 @@ const body = `<div style="font-size:13px;color:var(--text-light);margin-bottom:8
 pool.map(it => `
 <label style="display:flex;gap:8px;align-items:flex-start;padding:8px 4px;border-bottom:1px solid #f0f0f0;cursor:pointer;">
 <input type="checkbox" class="new-pick" value="${it.id}" style="margin-top:3px;" onchange="app.pickerChanged()">
-<span style="font-size:14px;">${this.escape(type === 'sentence' ? it.english : type === 'word' ? it.word : (it.rule || '').split('\n')[0])}</span>
+<span style="font-size:14px;">${this.escape(type === 'sentence' ? it.english : type === 'word' ? it.word : this.grammarFace(it))}</span>
 </label>
 `).join('');
 this.openModal(`选择要新学的${label}` + (dir ? ' · ' + (dir === 'en2zh' ? '英译中' : '中译英') : ''), body, () => {
@@ -1944,13 +2053,22 @@ const item = task.it;
         prompt = (isSentence ? item.chinese : item.meaning) || '(暂无释义)';
         answer = isSentence ? item.english : item.word;
       } else {
-        prompt = '回忆这条语法规则';
+        prompt = this.grammarFace(item);
         answer = item.rule;
       }
 
-      document.getElementById('study-prompt').textContent = prompt;
-      document.getElementById('study-answer').textContent = answer;
-      document.getElementById('study-answer').classList.add('hidden');
+      const promptEl = document.getElementById('study-prompt');
+      promptEl.textContent = prompt;
+      // 语法正文要按行排版，不能再用 textContent（换行会被折叠成一坨）
+      const answerEl = document.getElementById('study-answer');
+      if (this.studyType === 'grammar') {
+        answerEl.className = 'study-answer doc';
+        answerEl.innerHTML = this.grammarBodyHtml(answer);
+      } else {
+        answerEl.className = 'study-answer';
+        answerEl.textContent = answer;
+      }
+      answerEl.classList.add('hidden');
       document.getElementById('study-answer-extra').innerHTML = '';
       document.getElementById('study-actions-reveal').style.display = 'block';
       document.getElementById('study-actions-grade').style.display = 'none';
@@ -2020,10 +2138,14 @@ finish();
 });
 } else {
 this.openModal('修改本条语法', `
+<div style="margin-bottom:6px;">卡片正面（可留空，留空就用正文第一行）</div>
+<input id="cur-prompt" value="${this.escapeAttr(item.prompt || '')}" placeholder="例：现在完成时的构成" style="width:100%;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
+<div style="margin-bottom:6px;">正文（第一行当标题，例：/注意：/ - 开头的行会自动排版）</div>
 <textarea id="cur-rule" style="width:100%;min-height:150px;border:1.5px solid #dfe6e9;border-radius:10px;padding:10px;font-size:14px;resize:vertical;">${this.escape(item.rule || '')}</textarea>
 `, () => {
 const rule = document.getElementById('cur-rule').value.trim();
 if (!rule) return this.toast('内容不能为空');
+item.prompt = (document.getElementById('cur-prompt').value || '').trim();
 item.rule = rule;
 save(STORAGE_KEYS.grammar, this.grammar);
 finish();
