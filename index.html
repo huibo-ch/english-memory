@@ -2117,10 +2117,11 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       // Review settlement (ladder 1/2/4/7/15/30/60/120 days)
       this.settleReview(state, quality);
 
-      // 每次评分按刚点的档位重新起算「还要再背几次」：认识 3 次，模糊/忘记 15 次。
+      // 每次评分按刚点的档位重新起算「还要再背几次」（都不含点下去这一下）：
+      // 认识 1 次、模糊 2 次、忘记 9 次，也就是当天共刷 2 / 3 / 10 次。
       // 只有「换档位」才把本轮计数归零（本次评分不占新额度，等于从头再来）；
       // 一直点同一档则继续累积，不会永远出不了队。到期日仍按当天最后一次评分算。
-      const target = quality === 3 ? 3 : 15;
+      const target = quality === 1 ? 9 : quality === 2 ? 2 : 1;
       const switched = (task.budget || 0) !== target;
       task.budget = target;
       task.pass = switched ? 0 : (task.pass || 0) + 1;
