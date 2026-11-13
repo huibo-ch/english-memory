@@ -223,6 +223,11 @@ border-bottom: 1.5px solid var(--border);
     <button class="nav-btn" data-page="settings">设置</button>
   </div>
 
+  <div id="sync-badge" style="display:none;align-items:center;gap:8px;background:#FFF7DC;color:#6B5A1E;border:1px solid #f0e3b8;border-radius:10px;padding:7px 10px;margin-bottom:10px;font-size:12px;">
+    <span id="sync-badge-text" style="flex:1;line-height:1.4;"></span>
+    <button class="btn btn-outline" style="padding:3px 10px;font-size:12px;white-space:nowrap;" onclick="app.syncToGist()">立即上传</button>
+  </div>
+
 <div id="page-dashboard">
 <div style="display:flex;justify-content:flex-start;margin-bottom:10px;">
 <span style="display:inline-flex;align-items:center;font-family:'Kaiti SC','KaiTi','STKaiti',cursive;font-size:14px;color:#6B5A1E;background:#FFF7DC;padding:8px 16px;border-radius:12px;box-shadow:0 4px 14px rgba(120,100,30,0.15);max-width:100%;">
@@ -463,6 +468,17 @@ revenue | ˈrevənjuː | 收入；营收
         <button class="btn btn-outline" onclick="app.syncFromGist()">从 Gist 下载</button>
       </div>
       <div id="gist-status" style="font-size:13px;color:var(--text-light);margin-top:8px;text-align:center;"></div>
+<div class="setting-row" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+<div>
+<div class="setting-label">自动上传</div>
+<div class="setting-desc">停手 5 分钟后上传一次；点「结束学习」或切走页面会立即上传</div>
+</div>
+<select id="setting-auto-sync" onchange="app.saveSettings()">
+<option value="on">开启</option>
+<option value="off">关闭（只手动）</option>
+</select>
+</div>
+<div id="sync-volume" style="font-size:12px;color:var(--text-light);margin-top:10px;"></div>
       <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
         <button class="btn btn-outline btn-block" onclick="app.generateQuickLink()">生成快捷链接（保存到书签）</button>
         <div id="quick-link" style="font-size:12px;color:var(--text-light);margin-top:8px;word-break:break-all;display:none;"></div>
@@ -548,7 +564,9 @@ revenue | ˈrevənjuː | 收入；营收
     daily: 'em_daily',
     session: 'em_session',          // 旧版单会话（仅用于升级时丢弃）
 sessions: 'em_sessions',        // 按频道保存的未完成会话
-build: 'em_build'               // 已运行过的代码版本，升级时用来丢弃旧会话
+build: 'em_build',              // 已运行过的代码版本，升级时用来丢弃旧会话
+syncHashes: 'em_sync_hashes',   // 上次成功上传时每个同步文件的指纹（只传变动的文件）
+syncState: 'em_sync_dirty'      // 还没传上去的改动（角标）
 };
 
 // 改动预算/复习规则时记得改这个号，避免旧会话里的旧预算继续生效
@@ -566,6 +584,7 @@ const DEFAULT_SETTINGS = {
   dayTimezone: 'Asia/Qatar',
   gistId: '',
   gistToken: '',
+  autoSync: 'on',                 // 自动上传开关：on = 停手 5 分钟后自动传；off = 只手动点
   // 10 个通道上限必须写全：resetData 用 Object.assign({}, DEFAULT_SETTINGS) 重建设置，
   // 缺键会让设置页输入框变成 undefined、再保存时被兜底成默认值（= 偷偷改掉用户的上限）
   newWordEn: 20, newWordZh: 20, revWordEn: 30, revWordZh: 30,
@@ -575,6 +594,89 @@ const DEFAULT_SETTINGS = {
 
 // Timezone used for all "today" calculations (selectable in settings)
 let CURRENT_TZ = 'Asia/Qatar';
+
+// ---------- 同步配置 ----------
+// 停手 5 分钟才上传（原来是 8 秒，实际背诵节奏下几乎等于每张卡传一次全量）。
+// 「结束学习 / 切走页面 / 手动上传」会立即冲刷，不依赖这个延迟。
+const SYNC_DELAY = 300000;
+const SYNC_RETRY_DELAY = 60000;
+const SYNC_FORMAT = 2;            // 2 = 压缩信封；1/无标记 = 旧明文
+const SYNC_FILE_LIMIT = 950000;   // Gist 单文件约 1MB，留点余量
+const LIST_FIRST = 20;            // 列表默认只画这么多条
+const LIST_MORE = 500;            // 点「再显示」一次加这么多条
+
+// ---------- 同步文件编解码 ----------
+// 存进 Gist 的内容 = JSON 序列化后再 gzip + base64，体积约为明文的 1/5~1/8。
+// 读取时两种格式都认：带 {z:'gzip', d:'...'} 信封的解压，否则当旧明文直接用。
+function bytesToBase64(bytes) {
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+function base64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+async function gzipBytes(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function gunzipBytes(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function canCompress() {
+  return typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined'
+    && typeof Blob !== 'undefined' && typeof Response !== 'undefined';
+}
+
+// 32 位内容指纹（FNV-1a）。只用来判断「文件内容有没有变」，不需要抗碰撞到密码学强度
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+// 打包一个同步文件：能压缩就压缩，不能（老浏览器）就直接存明文，读取端两种都认
+async function packSyncFile(value) {
+  const json = JSON.stringify(value);
+  if (!canCompress()) return json;
+  try {
+    const gz = await gzipBytes(new TextEncoder().encode(json));
+    return JSON.stringify({ z: 'gzip', v: SYNC_FORMAT, d: bytesToBase64(gz) });
+  } catch (e) {
+    return json;   // 压缩失败就退回明文，同步不能因此中断
+  }
+}
+
+// 解包：返回解析后的值；格式不认识就抛错（调用方负责不覆盖本地数据）
+async function unpackSyncFile(text) {
+  if (text == null || text === '') return null;
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (e) { throw new Error('云端文件不是合法 JSON'); }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.z === 'gzip') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('当前浏览器太旧，无法读取压缩数据，请刷新页面到最新版');
+    if (typeof parsed.d !== 'string') throw new Error('压缩数据缺少内容字段');
+    let plain;
+    try { plain = await gunzipBytes(base64ToBytes(parsed.d)); }
+    catch (e) { throw new Error('压缩数据解不开（可能上传时被截断），请先在电脑端重新上传一次'); }
+    try { return JSON.parse(new TextDecoder().decode(plain)); }
+    catch (e) { throw new Error('压缩数据解开后不是合法 JSON'); }
+  }
+  return parsed;
+}
 
 // Review ladder (Memo-style forgetting curve, day granularity).
 // stage 0..7 means "the next successful recall schedules this many days out".
@@ -653,6 +755,8 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.records = load(STORAGE_KEYS.records, {});
       this.daily = load(STORAGE_KEYS.daily, {});
       this.sessions = load(STORAGE_KEYS.sessions, {});
+      this._listShown = { word: LIST_FIRST, sentence: LIST_FIRST, grammar: LIST_FIRST };
+      this._syncInfo = load(STORAGE_KEYS.syncState, {});   // { pending: n, lastOk: 'HH:MM' }
       // 代码升级后，旧版本留下的当天会话可能带着旧的重复次数（旧版认识 = 5 次），整体丢弃；
       // 当天的通道计数也必须归零——否则会出现「剩余 37」但计数所属的任务已经不在任何会话里，
       // 既排不进队列也永远背不完。词条本身的复习进度（nextReview）不受影响。
@@ -685,6 +789,7 @@ CURRENT_TZ = this.settings.dayTimezone || 'Asia/Qatar';
       this.initNav();
       this.applySettingsUI();
       this.refreshDashboard();
+      this.renderSyncBadge();
 
       // Check URL params for Gist credentials (for quick bookmark access)
       this.parseUrlParams();
@@ -699,7 +804,11 @@ if (this.settings.gistId && this.settings.gistToken) {
 }
 
 // Re-check date when page becomes visible/focused again (handles overnight open tabs)
-document.addEventListener('visibilitychange', () => { if (!document.hidden) this.checkDateRoll(); });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) this.checkDateRoll();
+  else this.flushSync();   // 切走页面前把待同步的改动推上去（5 分钟定时器可能等不到了）
+});
+window.addEventListener('pagehide', () => this.flushSync());
 window.addEventListener('focus', () => this.checkDateRoll());
 setInterval(() => this.checkDateRoll(), 60000);
 }
@@ -747,7 +856,7 @@ if (this.currentPage === 'study') this.goPage('dashboard');
       this.renderSentenceList();
       this.renderWordList();
       this.renderGrammarList();
-      this.syncToGist();
+      this.saveAndSync();
       this.toast('背诵进度已全部清零，正在同步到云端');
     }
 
@@ -865,10 +974,14 @@ this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrec
         if (el) el.style.display = (p === page) ? 'block' : 'none';
       });
       this.currentPage = page;
+      // 每次进列表页都回到「只画 20 条」，离开再回来等于重新收起
+      if (page === 'sentences' || page === 'words' || page === 'grammar') this._listShown[page === 'sentences' ? 'sentence' : page] = LIST_FIRST;
       if (page === 'dashboard') this.refreshDashboard();
-if (page === 'sentences') this.renderSentenceList();
-if (page === 'words') this.renderWordList();
-if (page === 'grammar') this.renderGrammarList();
+      if (page === 'sentences') this.renderSentenceList();
+      if (page === 'words') this.renderWordList();
+      if (page === 'grammar') this.renderGrammarList();
+      if (page === 'settings') this.renderSyncVolume();
+      this.renderSyncBadge();
     }
 
     applySettingsUI() {
@@ -888,6 +1001,8 @@ if (page === 'grammar') this.renderGrammarList();
       set('setting-day-tz', this.settings.dayTimezone || 'Asia/Qatar');
       set('setting-gist-id', this.settings.gistId || '');
       set('setting-gist-token', this.settings.gistToken || '');
+      set('setting-auto-sync', this.settings.autoSync === 'off' ? 'off' : 'on');
+      this.renderSyncVolume();
     }
 
     saveSettings(silent) {
@@ -917,7 +1032,13 @@ this.settings.voiceRate = document.getElementById('setting-voice-rate').value;
 this.settings.dayTimezone = document.getElementById('setting-day-tz').value;
 this.settings.gistId = document.getElementById('setting-gist-id').value.trim();
 this.settings.gistToken = document.getElementById('setting-gist-token').value.trim();
+const autoEl = document.getElementById('setting-auto-sync');
+const wasAuto = this.settings.autoSync;
+if (autoEl) this.settings.autoSync = autoEl.value === 'off' ? 'off' : 'on';
+// 从「关闭」切回「开启」：攒下的改动马上补传一次，不用等 5 分钟
+const resumeSync = wasAuto === 'off' && this.settings.autoSync !== 'off' && !!(this._syncInfo && this._syncInfo.pending);
 save(STORAGE_KEYS.settings, this.settings);
+this.renderSyncVolume();
 CURRENT_TZ = this.settings.dayTimezone;
 // 只有上限真的变了才裁剪/补齐队列；后台静默保存（同步前顺手存一次输入框）不该动队列
 const changed = JSON.stringify(this.settings) !== before;
@@ -931,8 +1052,9 @@ if (bad.length) {
   if (!silent) this.toast('上限至少要填 1，已保留原来的值');
   return;
 }
-if (silent) return;
+if (silent) { if (resumeSync) this.flushSync(); return; }
 this.toast(trimmed ? ('设置已保存，已随机移出 ' + trimmed + ' 个任务（按今日未背处理）') : (topped ? ('设置已保存，已把今天剩下的 ' + topped + ' 个复习条目加进来') : '设置已保存'));
+if (resumeSync) this.flushSync();
     }
 
 // A lowered cap takes effect immediately — for the channel being studied and for every other
@@ -1111,7 +1233,7 @@ return;
 // 统一删除入口：会话、今日计数、学习页队列一起清
 this.removeItems('word', Array.from(dropIds));
 this.refreshDashboard();
-this.syncToGist();
+this.saveAndSync();
 const msg = '已清理 ' + dropIds.size + ' 条重复词条（' + groupCount + ' 组，如 ' + samples.join('、') + '），现共 ' + this.words.length + ' 词';
 if (out) out.textContent = msg;
 this.toast(msg);
@@ -1612,7 +1734,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       this.closeModal();
       this.refreshDashboard();
       this.toast('成功导入 ' + n + ' 条' + label + (parsed.dup.length ? '，跳过重复 ' + parsed.dup.length + ' 条' : '') + '，当前共 ' + this.getItemsByType(kind).length + ' 条');
-      this.syncToGist();
+      this.saveAndSync();
     }
 
     parseWordInput() {
@@ -1644,7 +1766,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         el.innerHTML = '<div class="empty-state"><div class="emoji">🔤</div>还没有单词，去上方添加吧</div>';
         return;
       }
-      el.innerHTML = this.words.map(w => `
+      el.innerHTML = this.words.slice(0, this.listCap('word')).map(w => `
         <div class="list-item">
           <div class="content">
             <div style="font-weight:600;margin-bottom:4px;">${this.escape(w.word)}</div>
@@ -1657,7 +1779,30 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
             <button class="icon-btn" onclick="app.deleteWord('${w.id}')">🗑️</button>
           </div>
         </div>
-      `).join('');
+      `).join('') + this.listMoreHtml(this.words.length, 'word');
+    }
+
+    // 列表默认只画 20 条：库只负责存，你只需要知道条数，不必每进来一次就把 1700 条全画一遍
+    listCap(type) {
+      const v = this._listShown && this._listShown[type];
+      return Math.max(LIST_FIRST, Number(v) || LIST_FIRST);
+    }
+
+    listMoreHtml(total, type) {
+      const cap = this.listCap(type);
+      if (total <= cap) return '';
+      const step = Math.min(LIST_MORE, total - cap);
+      return '<div style="text-align:center;margin:14px 0 4px;">' +
+        '<button class="btn btn-outline" onclick="app.showMoreList(\'' + type + '\')">再显示 ' + step + ' 条（共 ' + total + ' 条）</button>' +
+        '</div>';
+    }
+
+    showMoreList(type) {
+      if (!this._listShown) this._listShown = { word: LIST_FIRST, sentence: LIST_FIRST, grammar: LIST_FIRST };
+      this._listShown[type] = this.listCap(type) + LIST_MORE;
+      if (type === 'word') this.renderWordList();
+      else if (type === 'sentence') this.renderSentenceList();
+      else this.renderGrammarList();
     }
 
     // 删除词库条目的唯一入口：数组、所有通道会话、今日计数一起清。
@@ -1714,7 +1859,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       this.removeItems('word', [id]);
       this.renderWordList();
       this.refreshDashboard();
-      this.syncToGist();
+      this.saveAndSync();
     }
 
     editWord(id) {
@@ -1734,7 +1879,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         save(STORAGE_KEYS.words, this.words);
         this.renderWordList();
         this.closeModal();
-        this.syncToGist();
+        this.saveAndSync();
       });
     }
 
@@ -1747,7 +1892,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         el.innerHTML = '<div class="empty-state"><div class="emoji">📝</div>还没有句子，去上方添加吧</div>';
         return;
       }
-      el.innerHTML = this.sentences.map((s, idx) => `
+      el.innerHTML = this.sentences.slice(0, this.listCap('sentence')).map((s, idx) => `
         <div class="list-item">
           <div class="content">
             <div style="font-weight:600;margin-bottom:4px;">${this.escape(s.english)}</div>
@@ -1760,7 +1905,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
             <button class="icon-btn" onclick="app.deleteSentence('${s.id}')">🗑️</button>
           </div>
         </div>
-      `).join('');
+      `).join('') + this.listMoreHtml(this.sentences.length, 'sentence');
     }
 
     renderGrammarList() {
@@ -1772,7 +1917,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         el.innerHTML = '<div class="empty-state"><div class="emoji">📘</div>还没有语法，去上方添加吧</div>';
         return;
       }
-      el.innerHTML = this.grammar.map(g => {
+      el.innerHTML = this.grammar.slice(0, this.listCap('grammar')).map(g => {
         const bodyLines = String(g.rule || '').split(/\r?\n/).filter(x => x.trim()).length;
         const noHint = !g.prompt && bodyLines <= 1;
         return `
@@ -1788,7 +1933,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
             <button class="icon-btn" onclick="app.deleteGrammar('${g.id}')">🗑️</button>
           </div>
         </div>`;
-      }).join('');
+      }).join('') + this.listMoreHtml(this.grammar.length, 'grammar');
     }
 
     escape(t) {
@@ -1854,7 +1999,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       this.removeItems('sentence', [id]);
       this.renderSentenceList();
       this.refreshDashboard();
-      this.syncToGist();
+      this.saveAndSync();
     }
 
     deleteGrammar(id) {
@@ -1862,7 +2007,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
       this.removeItems('grammar', [id]);
       this.renderGrammarList();
       this.refreshDashboard();
-      this.syncToGist();
+      this.saveAndSync();
     }
 
     editSentence(id) {
@@ -1882,7 +2027,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         save(STORAGE_KEYS.sentences, this.sentences);
         this.renderSentenceList();
         this.closeModal();
-        this.syncToGist();
+        this.saveAndSync();
       });
     }
 
@@ -1900,7 +2045,7 @@ return fmt(it.srs.en2zh, '英→中 ') + ' ｜ ' + fmt(it.srs.zh2en, '中→英 
         save(STORAGE_KEYS.grammar, this.grammar);
         this.renderGrammarList();
         this.closeModal();
-        this.syncToGist();
+        this.saveAndSync();
       });
     }
 
@@ -2103,7 +2248,7 @@ const finish = () => {
 this.closeModal();
 this.renderStudyCard();
 if (wasRevealed) this.showAnswer();
-this.syncToGist();
+this.saveAndSync();
 this.toast('已保存并同步云端');
 };
 if (this.studyType === 'word' || this.studyType === 'sentence') {
@@ -2166,7 +2311,7 @@ if (!confirm('确定删除「' + String(label).slice(0, 30) + '」吗？删除�
 this.removeItems(this.studyType, [item.id]);
 
 this.refreshDashboard();
-this.syncToGist();
+this.saveAndSync();
 
 if (!this.studyQueue.length) {
 this.toast('已删除并同步云端，本轮任务已全部完成');
@@ -2316,6 +2461,8 @@ this.renderStudyCard();
       // session is cleared only when the queue is fully graded or replaced by a new one
       this.goPage('dashboard');
       this.refreshDashboard();
+      // 一个学习段落结束了：不等 5 分钟定时器，直接把进度推上去
+      this.flushSync();
     }
 
     // Persist each channel's in-progress session separately, so switching channels
@@ -2498,6 +2645,8 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       this.studyQueue = [];
       this.studyIndex = 0;
       Object.values(STORAGE_KEYS).forEach(k => localStorage.removeItem(k));
+      this._syncInfo = {};                 // 角标跟着一起清（pending 记录也在 localStorage 里）
+      if (this._syncTimer) { clearTimeout(this._syncTimer); this._syncTimer = null; }
       save(STORAGE_KEYS.settings, this.settings);
       this.applySettingsUI();
       this.refreshDashboard();
@@ -2520,52 +2669,141 @@ if (data.words) { this.words = data.words; save(STORAGE_KEYS.words, this.words);
       return 'english-memory-data.json';
     }
 
-    // Debounced background sync: many quick actions (e.g. answering cards) coalesce
-    // into one upload a few seconds later, avoiding repeated 600KB+ uploads that
-    // frequently time out on mobile networks
+    // 记一笔「有改动没上传」：角标要能看出还没传上去
+    markDirty() {
+      this._syncInfo = this._syncInfo || {};
+      this._syncInfo.pending = (this._syncInfo.pending || 0) + 1;
+      save(STORAGE_KEYS.syncState, this._syncInfo);
+      this.renderSyncBadge();
+    }
+
+    renderSyncBadge() {
+      const box = document.getElementById('sync-badge');
+      const text = document.getElementById('sync-badge-text');
+      if (!box || !text) return;
+      const n = (this._syncInfo && this._syncInfo.pending) || 0;
+      if (!n || !this.settings.gistToken) { box.style.display = 'none'; return; }
+      const last = this._syncInfo.lastOk ? '（上次成功 ' + this._syncInfo.lastOk + '）' : '';
+      text.textContent = '● 有 ' + n + ' 处改动还没上传' + last;
+      box.style.display = 'flex';
+    }
+
+    // Debounced background upload. 默认等 5 分钟：按原来的 8 秒，背一张卡（10~20 秒）
+    // 就会触发一次全量上传，等于每张卡传一次。结束学习 / 切走页面会调 flushSync 立即传。
     scheduleSync(delay) {
+      this.markDirty();
+      if (this.settings.autoSync === 'off') return;   // 关掉自动同步：只攒角标，等手动点
       if (this._syncTimer) clearTimeout(this._syncTimer);
       this._syncTimer = setTimeout(() => {
         this._syncTimer = null;
         this.syncToGist(true);
-      }, delay == null ? 8000 : delay);
+      }, delay == null ? SYNC_DELAY : delay);
+    }
+
+    // 改完库（导入 / 编辑 / 删除）之后：开着自动上传就立刻传，关着就只记一笔等手动
+    saveAndSync() {
+      if (this.settings.autoSync === 'off') { this.markDirty(); return; }
+      this.syncToGist();
+    }
+
+    // 立即把待同步的改动推上去（结束学习、页面隐藏、手动）
+    flushSync() {
+      if (this._syncTimer) { clearTimeout(this._syncTimer); this._syncTimer = null; }
+      if (this.settings.autoSync === 'off') return;
+      if (!(this._syncInfo && this._syncInfo.pending)) return;   // 没有待传改动就别打扰
+      if (!this.settings.gistToken) return;
+      this.syncToGist(true);
+    }
+
+    loadSyncHashes() {
+      const v = load(STORAGE_KEYS.syncHashes, null);
+      if (v && typeof v === 'object' && v.files) return v;
+      return { gistId: '', files: {} };
+    }
+
+    saveSyncHashes(gistId, files) {
+      save(STORAGE_KEYS.syncHashes, { gistId: gistId || '', files: files || {} });
+    }
+
+    // 成功上传后清掉角标
+    markSynced() {
+      const now = new Date();
+      this._syncInfo = { pending: 0, lastOk: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') };
+      save(STORAGE_KEYS.syncState, this._syncInfo);
+      this.renderSyncBadge();
+    }
+
+    // 设置页显示的「每个文件多大 / 占 Gist 上限多少」
+    renderSyncVolume() {
+      const el = document.getElementById('sync-volume');
+      if (!el) return;
+      el.innerHTML = this.syncVolumeHtml();
+    }
+
+    syncVolumeHtml() {
+      const enc = new TextEncoder();
+      const row = (label, arr) => {
+        const bytes = enc.encode(JSON.stringify(arr)).length;
+        const pct = Math.round(bytes / SYNC_FILE_LIMIT * 100);
+        const color = pct > 85 ? '#e17055' : (pct > 60 ? '#B8860B' : 'var(--text-light)');
+        return '<div style="display:flex;gap:8px;font-size:12px;color:' + color + ';">' +
+          '<span style="flex:1;">' + label + '</span><span>' + arr.length + ' 条</span>' +
+          '<span>' + Math.round(bytes / 1024) + ' KB · 明文占上限 ' + pct + '%</span></div>';
+      };
+      return row('单词', this.words) + row('句子', this.sentences) + row('语法', this.grammar) +
+        '<div style="font-size:11px;color:#b2bec3;margin-top:6px;">上传时会再压缩到约 20%，实际占用约为上面数字的 1/5。</div>';
     }
 
     async syncToGist(silent) {
-this.saveSettings(true); // ensure latest input values are saved (no toast: this runs in the background)
-const statusEl = document.getElementById('gist-status');
-if (!this.settings.gistToken) {
-if (!silent && statusEl) statusEl.textContent = '请先填写 GitHub Token';
-return;
-}
-if (this._syncing) { this._syncPending = true; return; } // never run two uploads at once
-this._syncing = true;
-if (statusEl) statusEl.textContent = silent ? '后台同步中...' : '正在上传到 Gist...';
-
-      // Split into multiple files: Gist API has a ~1MB per-file limit; a single
-      // file holding all data gets silently truncated (real incident: words[1534] cut off)
-      const safeSettings = Object.assign({}, this.settings);
-      delete safeSettings.gistToken;
-      const payload = {
-        description: '英语记忆助手数据同步',
-        public: false,
-        files: {
-          'em-sentences.json': { content: JSON.stringify(this.sentences) },
-          'em-words.json': { content: JSON.stringify(this.words) },
-          'em-grammar.json': { content: JSON.stringify(this.grammar) },
-          'em-meta.json': { content: JSON.stringify({ settings: safeSettings, daily: this.daily, syncedAt: new Date().toISOString() }) }
-        }
-      };
-      // Gist limit is ~1MB per file measured in UTF-8 bytes (Chinese chars = 3 bytes each)
-      const enc = new TextEncoder();
-      const tooBig = Object.entries(payload.files).find(([, f]) => enc.encode(f.content).length > 950000);
-if (tooBig) {
-this._syncing = false;
-if (statusEl) statusEl.textContent = '上传中止：' + tooBig[0] + ' 超过 Gist 单文件限制，请联系开发者拆分';
-return;
-}
+      this.saveSettings(true); // ensure latest input values are saved (no toast: this runs in the background)
+      const statusEl = document.getElementById('gist-status');
+      if (!this.settings.gistToken) {
+        if (!silent && statusEl) statusEl.textContent = '请先填写 GitHub Token';
+        return;
+      }
+      if (this._syncing) { this._syncPending = true; return; } // never run two uploads at once
+      this._syncing = true;
+      if (statusEl) statusEl.textContent = silent ? '后台同步中...' : '正在上传到 Gist...';
 
       try {
+        // 每个文件单独打包（gzip + base64），Gist 单文件约 1MB，压缩后 1700 个单词约 115KB
+        const safeSettings = Object.assign({}, this.settings);
+        delete safeSettings.gistToken;
+        const bodies = {
+          'em-sentences.json': await packSyncFile(this.sentences),
+          'em-words.json': await packSyncFile(this.words),
+          'em-grammar.json': await packSyncFile(this.grammar),
+          'em-meta.json': await packSyncFile({ settings: safeSettings, daily: this.daily, format: SYNC_FORMAT })
+        };
+
+        const tooBig = Object.keys(bodies).find(name => bodies[name].length > SYNC_FILE_LIMIT);
+        if (tooBig) {
+          if (statusEl) statusEl.textContent = '上传中止：' + tooBig + ' 已超过 Gist 单文件上限（' + Math.round(bodies[tooBig].length / 1024) + 'KB）';
+          this._syncing = false;
+          return;
+        }
+
+        // 只传内容变了的文件：背单词只改 words/meta，句子和语法不用重传
+        const prev = this.loadSyncHashes();
+        const sameGist = !!this.settings.gistId && prev.gistId === this.settings.gistId;
+        const files = {};
+        const nextHashes = Object.assign({}, sameGist ? prev.files : {});
+        Object.keys(bodies).forEach(name => {
+          const h = fnv1a(bodies[name]);
+          if (sameGist && prev.files[name] === h) return;
+          files[name] = { content: bodies[name] };
+          nextHashes[name] = h;
+        });
+
+        const names = Object.keys(files);
+        if (sameGist && !names.length) {
+          if (statusEl) statusEl.textContent = '已是最新（无需上传）';
+          this.markSynced();
+          this._syncing = false;
+          return;
+        }
+
+        const payload = { description: '英语记忆助手数据同步', public: false, files: files };
         let url = 'https://api.github.com/gists';
         let method = 'POST';
         if (this.settings.gistId) {
@@ -2574,24 +2812,34 @@ return;
         }
         const res = await fetch(url, { method, headers: this._gistHeaders(), body: JSON.stringify(payload) });
         const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.message || '上传失败');
-        }
+        if (!res.ok) throw new Error(data.message || '上传失败');
         if (!this.settings.gistId && data.id) {
           this.settings.gistId = data.id;
-          document.getElementById('setting-gist-id').value = data.id;
+          const idEl = document.getElementById('setting-gist-id');
+          if (idEl) idEl.value = data.id;
           save(STORAGE_KEYS.settings, this.settings);
         }
-        // Best-effort cleanup of the legacy single-file data (pre-multi-file format)
-        try {
-          fetch(url, { method: 'PATCH', headers: this._gistHeaders(), body: JSON.stringify({ files: { 'english-memory-data.json': null } }) });
-        } catch (e2) { /* ignore */ }
-        if (statusEl) statusEl.textContent = '上传成功！' + new Date().toLocaleTimeString();
+        this.saveSyncHashes(this.settings.gistId, nextHashes);
+        const legacyDone = !!(this._syncInfo && this._syncInfo.legacyClean);
+        this.markSynced();
+        // Best-effort cleanup of the legacy single-file data (pre-multi-file format) — only once
+        if (!legacyDone) {
+          this._syncInfo.legacyClean = true;
+          save(STORAGE_KEYS.syncState, this._syncInfo);
+          try {
+            fetch(url, { method: 'PATCH', headers: this._gistHeaders(), body: JSON.stringify({ files: { 'english-memory-data.json': null } }) });
+          } catch (e2) { /* ignore */ }
+        }
+        if (statusEl) statusEl.textContent = '上传成功！' + new Date().toLocaleTimeString() + '（' + names.length + ' 个文件 ' + Math.round(names.reduce((s, n) => s + bodies[n].length, 0) / 1024) + ' KB）';
         if (!silent) this.toast('已同步到 Gist');
       } catch (e) {
         if (statusEl) statusEl.textContent = '上传失败: ' + e.message + (silent ? '（稍后自动重试）' : '');
         if (!silent) this.toast('Gist 同步失败');
-        if (silent) this.scheduleSync(30000); // quiet retry, no toast spam while studying
+        // 失败时不写指纹、不清角标；设了自动同步就安静重试
+        if (silent && this.settings.autoSync !== 'off') {
+          if (this._syncTimer) clearTimeout(this._syncTimer);
+          this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncToGist(true); }, SYNC_RETRY_DELAY);
+        }
       } finally {
         this._syncing = false;
         if (this._syncPending) { this._syncPending = false; this.scheduleSync(2000); }
@@ -2620,28 +2868,45 @@ return;
           throw new Error(msg);
         }
 
-        // Prefer new multi-file format; fall back to legacy single file
+        // 两种格式都认：新的 gzip 信封、旧的明文。任何一个文件解不开就整体中止，
+        // 绝不把「解不开」当成空数据写回本地（那等于把库清空）。
         const f = data.files || {};
-        const parseFile = (name) => { try { return f[name] && f[name].content ? JSON.parse(f[name].content) : null; } catch (e) { return null; } };
+        const readFile = async (name) => {
+          const item = f[name];
+          if (!item || item.content == null) return null;
+          if (item.truncated) throw new Error(name + ' 在 Gist 里被截断了，请先在电脑端重新上传');
+          try {
+            return await unpackSyncFile(item.content);
+          } catch (e) {
+            throw new Error(name + ' 解析失败：' + e.message);
+          }
+        };
+        const checkArr = (v, name) => {
+          if (v == null) return null;
+          if (!Array.isArray(v)) throw new Error(name + ' 内容不是列表，可能是旧版/损坏数据，已中止以免覆盖本地');
+          return v;
+        };
         let remote = null;
-        if (f['em-meta.json'] && f['em-meta.json'].content) {
+        if (f['em-meta.json'] && f['em-meta.json'].content != null) {
+          const meta = (await readFile('em-meta.json')) || {};
           remote = {
-            sentences: parseFile('em-sentences.json'),
-            words: parseFile('em-words.json'),
-            grammar: parseFile('em-grammar.json')
+            sentences: checkArr(await readFile('em-sentences.json'), '句子'),
+            words: checkArr(await readFile('em-words.json'), '单词'),
+            grammar: checkArr(await readFile('em-grammar.json'), '语法'),
+            settings: meta.settings,
+            daily: meta.daily
           };
-          const meta = parseFile('em-meta.json') || {};
-          remote.settings = meta.settings;
-          remote.daily = meta.daily;
         } else {
           const legacy = f[this._gistFileName()];
-          if (!legacy || !legacy.content) throw new Error('Gist 中未找到数据文件，请先在电脑端点击「手动上传到 Gist」');
-          remote = JSON.parse(legacy.content);
+          if (!legacy || legacy.content == null) throw new Error('Gist 中未找到数据文件，请先在电脑端点击「手动上传到 Gist」');
+          remote = await unpackSyncFile(legacy.content) || {};
         }
         if (remote.sentences) { this.sentences = remote.sentences; save(STORAGE_KEYS.sentences, this.sentences); }
-if (remote.words) { this.words = remote.words; save(STORAGE_KEYS.words, this.words); }
+        if (remote.words) { this.words = remote.words; save(STORAGE_KEYS.words, this.words); }
         if (remote.grammar) { this.grammar = remote.grammar; save(STORAGE_KEYS.grammar, this.grammar); }
         if (remote.daily) { this.daily = remote.daily; save(STORAGE_KEYS.daily, this.daily); }
+        // 刚下载的内容和云端一致，但指纹不可信（可能只下了部分文件），清掉让下次上传重新对齐
+        this.saveSyncHashes(this.settings.gistId, {});
         // Keep local settings for gistId/token but merge other fields
         if (remote.settings) {
           const keepGistId = this.settings.gistId;
