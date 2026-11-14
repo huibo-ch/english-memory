@@ -429,6 +429,7 @@ revenue | ˈrevənjuː | 收入；营收
           <option value="en-GB">英式英语</option>
         </select>
       </div>
+      <div id="voice-info" style="font-size:12px;color:var(--text-light);line-height:1.6;margin:0 0 12px;"></div>
       <div class="setting-row">
         <div>
           <div class="setting-label">语速</div>
@@ -810,6 +811,16 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => this.flushSync());
 window.addEventListener('focus', () => this.checkDateRoll());
 setInterval(() => this.checkDateRoll(), 60000);
+// 语音列表是异步加载的：先把 getVoices() 叫起来，加载完再刷新设置页提示
+try {
+const synth = window.speechSynthesis;
+if (synth) {
+synth.getVoices && synth.getVoices();
+if (typeof synth.addEventListener === 'function') {
+synth.addEventListener('voiceschanged', () => this.renderVoiceInfo());
+}
+}
+} catch (e) {}
 }
 
 checkDateRoll() {
@@ -979,7 +990,7 @@ this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrec
       if (page === 'sentences') this.renderSentenceList();
       if (page === 'words') this.renderWordList();
       if (page === 'grammar') this.renderGrammarList();
-      if (page === 'settings') this.renderSyncVolume();
+      if (page === 'settings') { this.renderSyncVolume(); this.renderVoiceInfo(); }
       this.renderSyncBadge();
     }
 
@@ -1002,6 +1013,7 @@ this.daily = { date: this.today, sentenceNew: 0, sentenceDone: 0, sentenceCorrec
       set('setting-gist-token', this.settings.gistToken || '');
       set('setting-auto-sync', this.settings.autoSync === 'off' ? 'off' : 'on');
       this.renderSyncVolume();
+      this.renderVoiceInfo();
     }
 
     saveSettings(silent) {
@@ -2337,19 +2349,96 @@ this.toast('已删除并同步云端');
         .replace(/[\r\n]+/g, ' ');
     }
 
-speak(text, times) {
-if (!window.speechSynthesis) return this.toast('当前浏览器不支持发音');
-window.speechSynthesis.cancel();
-const n = Math.max(1, times || 1);
-for (let i = 0; i < n; i++) {
-const u = new SpeechSynthesisUtterance(text);
-u.lang = this.settings.voiceLang;
-u.rate = parseFloat(this.settings.voiceRate);
-window.speechSynthesis.speak(u);
+// 当前可用的语音列表；Chrome 刚打开页面时常常是空的，靠 voiceschanged 预热
+availableVoices() {
+try {
+const synth = window.speechSynthesis;
+if (!synth || typeof synth.getVoices !== 'function') return [];
+return synth.getVoices() || [];
+} catch (e) { return []; }
+}
+
+// 按口音挑语音：先精确匹配（en-US），再同语种（en-*），最后只写语种的情况
+pickVoice(voices, lang) {
+const want = String(lang || 'en-US').toLowerCase().replace('_', '-');
+const base = want.split('-')[0];
+const norm = v => String((v && v.lang) || '').toLowerCase().replace('_', '-');
+return voices.find(v => norm(v) === want)
+|| voices.find(v => norm(v).indexOf(base + '-') === 0)
+|| voices.find(v => norm(v) === base)
+|| null;
+}
+
+// 设置页显示：这台机器到底装了哪些英语语音
+renderVoiceInfo() {
+const box = document.getElementById('voice-info');
+if (!box) return;
+const voices = this.availableVoices();
+if (!voices.length) { box.innerHTML = ''; return; }
+const en = voices.filter(v => /^en/i.test(v.lang || ''));
+if (en.length) {
+box.innerHTML = '已装英语语音：' + en.map(v => this.escHtml(v.name || v.lang)).join('、');
+} else {
+box.innerHTML = '<span style="color:#c0392b;">这台设备的系统里没有英语语音，发音只能用中文语音代读。</span> '
++ '装法（Windows）：设置 → 时间和语言 → 语言 → 添加 English (United States) → 勾选「语音」→ 装完刷新本页。';
 }
 }
 
+speak(text, times) {
+const synth = window.speechSynthesis;
+if (!synth || typeof SpeechSynthesisUtterance === 'undefined') return this.toast('当前浏览器不支持发音');
+if (!text) return;
+const want = this.settings.voiceLang || 'en-US';
+const rate = parseFloat(this.settings.voiceRate) || 1;
+const n = Math.max(1, times || 1);
+// 每次发音带一个序号：后发起的请求作废前一个，避免切卡瞬间两个队列叠着念
+this._speakToken = (this._speakToken || 0) + 1;
+const token = this._speakToken;
+const play = (attempt) => {
+if (this._speakToken !== token) return;
+const voices = this.availableVoices();
+// 语音列表还没加载出来（Chrome 首次常见）：等一拍再试，别白白静音
+if (!voices.length && attempt < 2) { setTimeout(() => play(attempt + 1), 250); return; }
+let voice = this.pickVoice(voices, want);
+if (!voice && voices.length) {
+// 系统里没装英语语音：用现有语音代读，至少能听见，并提示一次去哪装
+voice = voices[0];
+if (!this._voiceNoticeShown) {
+this._voiceNoticeShown = true;
+this.toast('系统没有英语语音，先用「' + (voice.name || voice.lang) + '」代读；可在 Windows 设置里装英语语音');
+}
+}
+synth.cancel();
+// Chrome 里 cancel() 之后立刻 speak() 会被丢掉，必须隔一拍
+setTimeout(() => {
+if (this._speakToken !== token) return;
+let alive = 0;
+for (let i = 0; i < n; i++) {
+const u = new SpeechSynthesisUtterance(text);
+u.lang = voice ? voice.lang : want;
+if (voice) u.voice = voice;
+u.rate = rate;
+// 浏览器会把「没有可用语音」的请求静默丢掉：既不报错也不出声。
+// 记一下它到底有没有真的开始，好给用户一个能看懂的反馈，而不是点了没反应。
+u.onstart = () => { alive++; };
+u.onend = () => { alive++; };
+u.onerror = () => { alive++; };
+synth.speak(u);
+}
+setTimeout(() => {
+if (this._speakToken !== token || alive) return;
+if (this._silentWarnShown) return;
+this._silentWarnShown = true;
+this.toast('系统没发出声音：可能没有可用语音，去「设置 → 时间和语言 → 语言」里装英语语音后刷新本页');
+}, 1200);
+}, 60);
+};
+play(0);
+}
+
 stopSpeak() {
+// 作废已排队但还没开口的发音（speak 里有 60ms 的 cancel 保护延迟）
+this._speakToken = (this._speakToken || 0) + 1;
 try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
 }
 
