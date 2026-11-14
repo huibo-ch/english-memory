@@ -2377,12 +2377,18 @@ const voices = this.availableVoices();
 if (!voices.length) { box.innerHTML = ''; return; }
 const en = voices.filter(v => /^en/i.test(v.lang || ''));
 if (en.length) {
-box.innerHTML = '已装英语语音：' + en.map(v => this.escHtml(v.name || v.lang)).join('、');
+box.innerHTML = '已装英语语音：' + en.map(v => this.escHtml(v.name || v.lang)).join('、')
++ '<div style="margin-top:6px;"><button class="audio-btn" onclick="app.tryVoice()">🔊 试听一句</button></div>';
 } else {
 box.innerHTML = '<span style="color:#c0392b;">这台设备的系统里没有英语语音，发音只能用中文语音代读。</span> '
 + '装法（Windows）：设置 → 时间和语言 → 语言 → 添加 English (United States) → 勾选「语音」→ 装完刷新本页。';
 }
 }
+
+// 设置页的试听：不用去学习页就能确认这台机器的英语发音好不好
+  tryVoice() {
+    this.speak('This is your English voice. Invoice, contract, profit.', 1);
+  }
 
 speak(text, times) {
 const synth = window.speechSynthesis;
