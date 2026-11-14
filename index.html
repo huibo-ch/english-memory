@@ -520,7 +520,6 @@ revenue | ˈrevənjuː | 收入；营收
           <div class="upload-hint" style="margin-bottom:8px;">请根据回忆准确度选择</div>
           <div class="btn-row">
             <button class="btn btn-danger" onclick="app.grade(1)">忘记</button>
-            <button class="btn btn-warning" onclick="app.grade(2)">模糊</button>
             <button class="btn btn-success" onclick="app.grade(3)">认识</button>
           </div>
         </div>
@@ -1401,25 +1400,30 @@ delete it.repetitions; delete it.interval; delete it.ease;
 return it;
 }
 
-// Memo-style settlement: 认识 advances at most one stage per day, while
-// 模糊 / 忘记 can always pull the stage back down (and re-unlock one advance).
+// Memo-style settlement with two grades only: 忘记(1) / 认识(3).
+// 认识 advances at most one stage per day; 忘记 resets to stage 0.
+// 跨天落点只看「今天有没有点过忘记」：出现过就不升阶，直接排明天。
 settleReview(state, quality) {
 const today = this.today;
 state.seen = true;
-if (quality === 3) {
+if (quality === 1) {
+state.stage = 0;
+state.nextReview = addDays(today, 1);
+state.gradedOn = null;
+state.forgotOn = today;   // 今天点过忘记 → 之后点认识也不许升阶
+return state;
+}
+// quality === 3
+if (state.forgotOn === today) {
+state.stage = 0;
+state.nextReview = addDays(today, 1);
+state.gradedOn = null;
+return state;
+}
 if (state.gradedOn !== today) {
 state.nextReview = addDays(today, reviewInterval(state.stage));
 state.stage = Math.min(MAX_STAGE, (state.stage || 0) + 1);
 state.gradedOn = today;
-}
-} else if (quality === 2) {
-state.stage = Math.max(0, (state.stage || 0) - 1);
-state.nextReview = addDays(today, reviewInterval(state.stage));
-state.gradedOn = null;
-} else {
-state.stage = 0;
-state.nextReview = addDays(today, 1);
-state.gradedOn = null;
 }
 return state;
 }
@@ -2175,9 +2179,9 @@ const item = task.it;
       if (cardCount) {
         const target = task.budget || 0;
         if (target) {
-          // 本轮还要再背几次；档位名跟卡片上的按钮一致（忘记/模糊/认识）
+          // 本轮还要再背几次；档位名跟卡片上的按钮一致（忘记/认识）
           const left = Math.max(0, target - (task.pass || 0));
-          const gname = task.grade === 3 ? '认识' : task.grade === 2 ? '模糊' : task.grade === 1 ? '忘记' : '';
+          const gname = task.grade === 3 ? '认识' : task.grade === 1 ? '忘记' : '';
           cardCount.textContent = left > 0
             ? (gname ? '按' + gname + '，还要再背 ' + left + ' 次' : '还要再背 ' + left + ' 次')
             : '本轮次数已背完，再评一次即可';
@@ -2385,10 +2389,10 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       this.settleReview(state, quality);
 
       // 每次评分按刚点的档位重新起算「还要再背几次」（都不含点下去这一下）：
-      // 认识 1 次、模糊 2 次、忘记 9 次，也就是当天共刷 2 / 3 / 10 次。
+      // 认识 1 次、忘记 9 次，也就是当天共刷 2 / 10 次。
       // 只有「换档位」才把本轮计数归零（本次评分不占新额度，等于从头再来）；
       // 一直点同一档则继续累积，不会永远出不了队。到期日仍按当天最后一次评分算。
-      const target = quality === 1 ? 9 : quality === 2 ? 2 : 1;
+      const target = quality === 1 ? 9 : 1;
       const switched = (task.budget || 0) !== target;
       task.budget = target;
       task.pass = switched ? 0 : (task.pass || 0) + 1;
