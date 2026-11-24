@@ -2485,6 +2485,7 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
 
       // 每次评分按刚点的档位重新起算「还要再背几次」（都不含点下去这一下）：
       // 认识 1 次、忘记 9 次，也就是当天共刷 2 / 10 次。
+      // 复习通道点「认识」直接当天出队，不走这套次数（见下方 reviewKnow 分支）。
       // 只有「换档位」才把本轮计数归零（本次评分不占新额度，等于从头再来）；
       // 一直点同一档则继续累积，不会永远出不了队。到期日仍按当天最后一次评分算。
       const target = quality === 1 ? 9 : 1;
@@ -2493,8 +2494,6 @@ try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {
       task.pass = switched ? 0 : (task.pass || 0) + 1;
       task.grade = quality;
       task.seen = (task.seen || 0) + 1;
-      // 单词·复习两个方向单独记「今天点了几次认识」，用来保证当天一定再出现一次
-      if (quality === 3) task.know = (task.know || 0) + 1;
 
       // Daily stats count a task once — on its first pass of the day
       if (firstPass) {
@@ -2538,18 +2537,13 @@ this.scheduleSync();
 // Same-day re-appearance without cloning the queue entry: the task keeps a single
 // slot and rotates to the tail until today's pass budget is used up. Only a task that
 // finished its whole budget counts as written off for its channel.
-// 单词·复习（中译英 / 英译中）例外：点「认识」后这张卡当天必须再出现一次，并且插到第 3 张
-// 的位置——这两个通道队列上百条，排到队尾等于当天根本看不到。其余通道逻辑保持不变。
-const wordReview = this.studyType === 'word' && !this.studyIsNew && !!task.dir;
+// 复习通道例外（单词/句子两个方向 + 语法）：点「认识」当天直接收工，不再回队列；
+// 后续哪天再出现仍由 settleReview 的间隔阶梯决定，与本次改动前完全一致。
+// 新增通道（词/句/语法）不受影响，仍按原来的「认识后再背 1 次」。
+const reviewKnow = !this.studyIsNew && quality === 3;
 const cur = this.studyIndex;
 this.studyQueue.splice(cur, 1);
-const knowAgain = wordReview && quality === 3 && (task.know || 0) === 1;
-if (knowAgain) {
-  task.pass = 0;
-  task.budget = 1;
-  const at = Math.min(Math.max(cur + 1, 3), this.studyQueue.length);
-  this.studyQueue.splice(at, 0, task);
-} else if ((task.pass || 0) < (task.budget || 1)) {
+if (!reviewKnow && (task.pass || 0) < (task.budget || 1)) {
   this.studyQueue.push(task);
 } else {
   this.channelStat(this.studyType, task.dir || null, this.studyIsNew).done++;
@@ -2589,7 +2583,7 @@ this.renderStudyCard();
         isNew: !!this.studyIsNew,
         date: this.today,
         index: this.studyIndex,
-        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0, pass: t.pass || 0, know: t.know || 0, grade: t.grade || 0 }))
+        tasks: this.studyQueue.map(t => ({ id: t.it.id, dir: t.dir || null, isNew: !!t.isNew, budget: t.budget || 0, seen: t.seen || 0, pass: t.pass || 0, grade: t.grade || 0 }))
       };
       save(STORAGE_KEYS.sessions, this.sessions);
     }
@@ -2632,7 +2626,6 @@ this.renderStudyCard();
           budget: t.budget || 0,
           seen: t.seen || 0,
           pass: t.pass || 0,
-          know: t.know || 0,
           grade: t.grade || 0
         });
       });
